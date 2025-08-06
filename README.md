@@ -117,6 +117,10 @@ swlc-mcp
 
 欢迎提交Issue和Pull Request来改进这个项目。
 
+## 致谢
+
+本项目完全由 [Cursor](https://cursor.sh/) 完成。
+
 ## 许可证
 
 MIT License
