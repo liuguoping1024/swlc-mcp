@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "swlc-mcp"
+version = "0.1.0"
+description = "MCP Server for Shanghai lottery information"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.1.0",
+    "httpx>=0.27.0",
+    "python-dateutil>=2.8.2",
+    "pydantic>=2.0.0"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[project.scripts]
+swlc-mcp = "swlc_mcp.server:main"
