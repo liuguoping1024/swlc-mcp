@@ -51,7 +51,15 @@ class SWLCService:
     """SWLC彩票数据服务"""
     
     def __init__(self):
-        self.client = httpx.AsyncClient(timeout=30.0)
+        self.client = httpx.AsyncClient(
+            timeout=30.0,
+            follow_redirects=True,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Referer": "https://www.cwl.gov.cn/",
+                "Accept": "application/json, text/plain, */*",
+            },
+        )
         self.base_url = 'https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice'
         self.lottery_codes = {
             '双色球': 'ssq',
