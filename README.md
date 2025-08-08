@@ -89,6 +89,8 @@ swlc-mcp
 - "查看福彩3D最近10期的历史数据"
 - "获取快乐8最新开奖信息"
 
+<img width="400" alt="image" src="https://github.com/user-attachments/assets/cdee6ff7-4791-4fe8-9e12-e4f7261d8527" />
+
 ## 技术栈
 
 - **Python 3.10+**
