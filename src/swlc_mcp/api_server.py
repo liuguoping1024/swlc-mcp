@@ -1,0 +1,304 @@
+"""
+上海彩票MCP Server HTTP API
+为MCP服务器提供HTTP接口，支持其他应用通过HTTP请求访问彩票数据
+"""
+
+import asyncio
+import json
+import logging
+from datetime import datetime
+from typing import Dict, Any, List
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+import uvicorn
+
+from .server import SWLCService, LotteryResult
+
+# 配置日志
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# 创建FastAPI应用
+app = FastAPI(
+    title="上海彩票MCP API",
+    description="提供彩票开奖数据查询和分析的HTTP API接口",
+    version="1.0.0"
+)
+
+# 添加CORS中间件
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 初始化彩票服务
+lottery_service = SWLCService()
+
+@app.get("/")
+async def root():
+    """API根路径"""
+    return {
+        "message": "上海彩票MCP API服务",
+        "version": "1.0.0",
+        "timestamp": datetime.now().isoformat(),
+        "endpoints": {
+            "latest": "/api/latest/{lottery_type}",
+            "historical": "/api/historical/{lottery_type}",
+            "analysis": "/api/analysis/{lottery_type}",
+            "random": "/api/random/{lottery_type}",
+            "sync": "/api/sync/{lottery_type}",
+            "database": "/api/database/info"
+        }
+    }
+
+@app.get("/api/latest/{lottery_type}")
+async def get_latest_result(lottery_type: str):
+    """获取最新开奖结果"""
+    try:
+        if lottery_type == "ssq":
+            result = await lottery_service.get_ssq_latest()
+        elif lottery_type == "3d":
+            result = await lottery_service.get_3d_latest()
+        elif lottery_type == "qlc":
+            result = await lottery_service.get_qlc_latest()
+        elif lottery_type == "kl8":
+            result = await lottery_service.get_kl8_latest()
+        else:
+            raise HTTPException(status_code=400, detail="不支持的彩票类型")
+        
+        if result:
+            return {
+                "success": True,
+                "data": {
+                    "lottery_type": result.lottery_type,
+                    "period": result.period,
+                    "draw_date": result.draw_date,
+                    "numbers": result.numbers,
+                    "special_numbers": result.special_numbers,
+                    "prize_pool": result.prize_pool,
+                    "sales_amount": result.sales_amount
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            raise HTTPException(status_code=404, detail="未找到开奖数据")
+            
+    except Exception as e:
+        logger.error(f"获取最新开奖结果失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/historical/{lottery_type}")
+async def get_historical_data(
+    lottery_type: str, 
+    periods: int = Query(10, ge=1, le=100, description="获取期数")
+):
+    """获取历史开奖数据"""
+    try:
+        lottery_type_map = {
+            "ssq": "双色球",
+            "3d": "福彩3D", 
+            "qlc": "七乐彩",
+            "kl8": "快乐8"
+        }
+        
+        chinese_type = lottery_type_map.get(lottery_type)
+        if not chinese_type:
+            raise HTTPException(status_code=400, detail="不支持的彩票类型")
+        
+        results = await lottery_service.get_historical_data(chinese_type, periods)
+        
+        if results:
+            data = []
+            for result in results:
+                data.append({
+                    "lottery_type": result.lottery_type,
+                    "period": result.period,
+                    "draw_date": result.draw_date,
+                    "numbers": result.numbers,
+                    "special_numbers": result.special_numbers,
+                    "prize_pool": result.prize_pool,
+                    "sales_amount": result.sales_amount
+                })
+            
+            return {
+                "success": True,
+                "data": data,
+                "count": len(data),
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            raise HTTPException(status_code=404, detail="未找到历史数据")
+            
+    except Exception as e:
+        logger.error(f"获取历史数据失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/analysis/{lottery_type}")
+async def get_number_analysis(
+    lottery_type: str,
+    periods: int = Query(30, ge=5, le=100, description="分析期数")
+):
+    """获取号码分析"""
+    try:
+        lottery_type_map = {
+            "ssq": "双色球",
+            "3d": "福彩3D", 
+            "qlc": "七乐彩",
+            "kl8": "快乐8"
+        }
+        
+        chinese_type = lottery_type_map.get(lottery_type)
+        if not chinese_type:
+            raise HTTPException(status_code=400, detail="不支持的彩票类型")
+        
+        results = await lottery_service.get_historical_data(chinese_type, periods)
+        
+        if results:
+            analysis = lottery_service.analyze_numbers(results)
+            
+            return {
+                "success": True,
+                "data": {
+                    "lottery_type": chinese_type,
+                    "analysis_periods": periods,
+                    "hot_numbers": analysis.hot_numbers,
+                    "cold_numbers": analysis.cold_numbers,
+                    "frequency_stats": analysis.frequency_stats,
+                    "consecutive_analysis": analysis.consecutive_analysis
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            raise HTTPException(status_code=404, detail="未找到数据进行分析")
+            
+    except Exception as e:
+        logger.error(f"获取号码分析失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/random/{lottery_type}")
+async def get_random_numbers(
+    lottery_type: str,
+    count: int = Query(1, ge=1, le=10, description="生成组数")
+):
+    """生成随机号码"""
+    try:
+        lottery_type_map = {
+            "ssq": "双色球",
+            "3d": "福彩3D", 
+            "qlc": "七乐彩",
+            "kl8": "快乐8"
+        }
+        
+        chinese_type = lottery_type_map.get(lottery_type)
+        if not chinese_type:
+            raise HTTPException(status_code=400, detail="不支持的彩票类型")
+        
+        results = []
+        for i in range(count):
+            random_result = lottery_service.generate_random_numbers(chinese_type)
+            results.append({
+                "index": i + 1,
+                "lottery_type": chinese_type,
+                "numbers": random_result,
+                "format": random_result['format']
+            })
+        
+        return {
+            "success": True,
+            "data": results,
+            "count": len(results),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"生成随机号码失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/sync/{lottery_type}")
+async def sync_lottery_data(
+    lottery_type: str,
+    periods: int = Query(10, ge=1, le=50, description="同步期数")
+):
+    """同步彩票数据"""
+    try:
+        lottery_type_map = {
+            "ssq": "双色球",
+            "3d": "福彩3D", 
+            "qlc": "七乐彩",
+            "kl8": "快乐8"
+        }
+        
+        chinese_type = lottery_type_map.get(lottery_type)
+        if not chinese_type:
+            raise HTTPException(status_code=400, detail="不支持的彩票类型")
+        
+        results = await lottery_service.get_historical_data(chinese_type, periods)
+        
+        if results:
+            # 记录同步日志
+            lottery_service.db.log_sync(chinese_type, len(results))
+            
+            return {
+                "success": True,
+                "message": f"成功同步{chinese_type}数据{len(results)}期",
+                "data": {
+                    "lottery_type": chinese_type,
+                    "synced_periods": len(results),
+                    "sync_time": datetime.now().isoformat()
+                }
+            }
+        else:
+            lottery_service.db.log_sync(chinese_type, 0, 'failed', '获取数据失败')
+            raise HTTPException(status_code=500, detail="同步数据失败")
+            
+    except Exception as e:
+        logger.error(f"同步数据失败: {e}")
+        lottery_service.db.log_sync(chinese_type, 0, 'failed', str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/database/info")
+async def get_database_info():
+    """获取数据库信息"""
+    try:
+        info = lottery_service.db.get_database_info()
+        
+        return {
+            "success": True,
+            "data": {
+                "record_counts": {
+                    "双色球": info.get('ssq_results', 0),
+                    "福彩3D": info.get('fucai3d_results', 0),
+                    "七乐彩": info.get('qilecai_results', 0),
+                    "快乐8": info.get('kuaile8_results', 0)
+                },
+                "last_sync": info.get('last_sync', {}),
+                "database_path": lottery_service.db.db_path
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"获取数据库信息失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/health")
+async def health_check():
+    """健康检查"""
+    return {
+        "status": "healthy",
+        "service": "上海彩票MCP API",
+        "timestamp": datetime.now().isoformat(),
+        "database": "connected" if lottery_service.db else "disconnected"
+    }
+
+def start_api_server(host: str = "0.0.0.0", port: int = 8000):
+    """启动API服务器"""
+    logger.info(f"启动HTTP API服务器: http://{host}:{port}")
+    uvicorn.run(app, host=host, port=port)
+
+if __name__ == "__main__":
+    start_api_server()

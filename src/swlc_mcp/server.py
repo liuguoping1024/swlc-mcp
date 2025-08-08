@@ -23,6 +23,9 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from pydantic import BaseModel
 
+# 导入数据库模块
+from .database import LotteryDatabase
+
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -67,6 +70,8 @@ class SWLCService:
             '七乐彩': 'qlc',
             '快乐8': 'kl8'
         }
+        # 初始化数据库
+        self.db = LotteryDatabase()
     
     async def _fetch_lottery_data(self, lottery_type: str, page_size: int = 1) -> Optional[dict]:
         """通用的彩票数据获取方法"""
@@ -97,6 +102,22 @@ class SWLCService:
     async def get_ssq_latest(self) -> Optional[LotteryResult]:
         """获取双色球最新开奖结果"""
         try:
+            # 首先尝试从数据库获取
+            db_result = self.db.get_latest_ssq()
+            if db_result:
+                logger.info("从本地数据库获取双色球数据")
+                return LotteryResult(
+                    lottery_type="双色球",
+                    period=db_result['period'],
+                    draw_date=db_result['draw_date'],
+                    numbers=db_result['red_balls'],
+                    special_numbers=[db_result['blue_ball']],
+                    prize_pool=db_result['prize_pool'],
+                    sales_amount=db_result['sales_amount']
+                )
+            
+            # 如果数据库没有数据，从网络获取并保存
+            logger.info("从网络获取双色球数据")
             data = await self._fetch_lottery_data('双色球')
             if data and data['result']:
                 result_data = data['result'][0]
@@ -115,6 +136,19 @@ class SWLCService:
                 if sales and sales.isdigit():
                     sales = f"{int(sales) / 100000000:.2f}亿元"
                 
+                # 保存到数据库
+                self.db.save_ssq_result(
+                    period=result_data['code'],
+                    draw_date=result_data['date'],
+                    red_balls=red_balls,
+                    blue_ball=blue_ball,
+                    prize_pool=pool_money,
+                    sales_amount=sales
+                )
+                
+                # 更新号码统计
+                self.db.update_number_statistics('双色球', red_balls + [blue_ball])
+                
                 return LotteryResult(
                     lottery_type="双色球",
                     period=result_data['code'],
@@ -131,6 +165,20 @@ class SWLCService:
     async def get_3d_latest(self) -> Optional[LotteryResult]:
         """获取福彩3D最新开奖结果"""
         try:
+            # 首先尝试从数据库获取
+            db_result = self.db.get_latest_3d()
+            if db_result:
+                logger.info("从本地数据库获取福彩3D数据")
+                return LotteryResult(
+                    lottery_type="福彩3D",
+                    period=db_result['period'],
+                    draw_date=db_result['draw_date'],
+                    numbers=db_result['numbers'],
+                    sales_amount=db_result['sales_amount']
+                )
+            
+            # 如果数据库没有数据，从网络获取并保存
+            logger.info("从网络获取福彩3D数据")
             data = await self._fetch_lottery_data('福彩3D')
             if data and data['result']:
                 result_data = data['result'][0]
@@ -142,6 +190,17 @@ class SWLCService:
                 sales = result_data.get('sales', '')
                 if sales and sales.isdigit():
                     sales = f"{int(sales) / 10000:.1f}万元"
+                
+                # 保存到数据库
+                self.db.save_3d_result(
+                    period=result_data['code'],
+                    draw_date=result_data['date'],
+                    numbers=numbers,
+                    sales_amount=sales
+                )
+                
+                # 更新号码统计
+                self.db.update_number_statistics('福彩3D', numbers)
                 
                 return LotteryResult(
                     lottery_type="福彩3D",
@@ -157,6 +216,22 @@ class SWLCService:
     async def get_qlc_latest(self) -> Optional[LotteryResult]:
         """获取七乐彩最新开奖结果"""
         try:
+            # 首先尝试从数据库获取
+            db_result = self.db.get_latest_qlc()
+            if db_result:
+                logger.info("从本地数据库获取七乐彩数据")
+                return LotteryResult(
+                    lottery_type="七乐彩",
+                    period=db_result['period'],
+                    draw_date=db_result['draw_date'],
+                    numbers=db_result['basic_numbers'],
+                    special_numbers=[db_result['special_number']],
+                    prize_pool=db_result['prize_pool'],
+                    sales_amount=db_result['sales_amount']
+                )
+            
+            # 如果数据库没有数据，从网络获取并保存
+            logger.info("从网络获取七乐彩数据")
             data = await self._fetch_lottery_data('七乐彩')
             if data and data['result']:
                 result_data = data['result'][0]
@@ -178,6 +253,19 @@ class SWLCService:
                 if sales and sales.isdigit():
                     sales = f"{int(sales) / 10000:.1f}万元"
                 
+                # 保存到数据库
+                self.db.save_qlc_result(
+                    period=result_data['code'],
+                    draw_date=result_data['date'],
+                    basic_numbers=basic_numbers,
+                    special_number=special_number,
+                    prize_pool=pool_money,
+                    sales_amount=sales
+                )
+                
+                # 更新号码统计
+                self.db.update_number_statistics('七乐彩', basic_numbers + [special_number])
+                
                 return LotteryResult(
                     lottery_type="七乐彩",
                     period=result_data['code'],
@@ -194,6 +282,21 @@ class SWLCService:
     async def get_kl8_latest(self) -> Optional[LotteryResult]:
         """获取快乐8最新开奖结果"""
         try:
+            # 首先尝试从数据库获取
+            db_result = self.db.get_latest_kl8()
+            if db_result:
+                logger.info("从本地数据库获取快乐8数据")
+                return LotteryResult(
+                    lottery_type="快乐8",
+                    period=db_result['period'],
+                    draw_date=db_result['draw_date'],
+                    numbers=db_result['numbers'],
+                    prize_pool=db_result['prize_pool'],
+                    sales_amount=db_result['sales_amount']
+                )
+            
+            # 如果数据库没有数据，从网络获取并保存
+            logger.info("从网络获取快乐8数据")
             data = await self._fetch_lottery_data('快乐8')
             if data and data['result']:
                 result_data = data['result'][0]
@@ -211,6 +314,18 @@ class SWLCService:
                 if sales and sales.isdigit():
                     sales = f"{int(sales) / 10000:.1f}万元"
                 
+                # 保存到数据库
+                self.db.save_kl8_result(
+                    period=result_data['code'],
+                    draw_date=result_data['date'],
+                    numbers=numbers,
+                    prize_pool=pool_money,
+                    sales_amount=sales
+                )
+                
+                # 更新号码统计
+                self.db.update_number_statistics('快乐8', numbers)
+                
                 return LotteryResult(
                     lottery_type="快乐8",
                     period=result_data['code'],
@@ -226,6 +341,56 @@ class SWLCService:
     async def get_historical_data(self, lottery_type: str, periods: int = 10) -> List[LotteryResult]:
         """获取历史开奖数据"""
         try:
+            # 首先尝试从数据库获取
+            db_results = self.db.get_historical_data(lottery_type, periods)
+            if db_results:
+                logger.info(f"从本地数据库获取{lottery_type}历史数据")
+                results = []
+                for item in db_results:
+                    if lottery_type == "双色球":
+                        result = LotteryResult(
+                            lottery_type="双色球",
+                            period=item['period'],
+                            draw_date=item['draw_date'],
+                            numbers=item['red_balls'],
+                            special_numbers=[item['blue_ball']],
+                            prize_pool=item['prize_pool'],
+                            sales_amount=item['sales_amount']
+                        )
+                    elif lottery_type == "福彩3D":
+                        result = LotteryResult(
+                            lottery_type="福彩3D",
+                            period=item['period'],
+                            draw_date=item['draw_date'],
+                            numbers=item['numbers'],
+                            sales_amount=item['sales_amount']
+                        )
+                    elif lottery_type == "七乐彩":
+                        result = LotteryResult(
+                            lottery_type="七乐彩",
+                            period=item['period'],
+                            draw_date=item['draw_date'],
+                            numbers=item['basic_numbers'],
+                            special_numbers=[item['special_number']],
+                            prize_pool=item['prize_pool'],
+                            sales_amount=item['sales_amount']
+                        )
+                    elif lottery_type == "快乐8":
+                        result = LotteryResult(
+                            lottery_type="快乐8",
+                            period=item['period'],
+                            draw_date=item['draw_date'],
+                            numbers=item['numbers'],
+                            prize_pool=item['prize_pool'],
+                            sales_amount=item['sales_amount']
+                        )
+                    else:
+                        continue
+                    results.append(result)
+                return results
+            
+            # 如果数据库数据不足，从网络获取并保存
+            logger.info(f"从网络获取{lottery_type}历史数据")
             data = await self._fetch_lottery_data(lottery_type, periods)
             if not data or not data['result']:
                 return []
@@ -236,6 +401,14 @@ class SWLCService:
                     # 解析红球和蓝球
                     red_balls = item['red'].split(',')
                     blue_ball = item['blue']
+                    
+                    # 保存到数据库
+                    self.db.save_ssq_result(
+                        period=item['code'],
+                        draw_date=item['date'],
+                        red_balls=red_balls,
+                        blue_ball=blue_ball
+                    )
                     
                     result = LotteryResult(
                         lottery_type="双色球",
@@ -249,6 +422,13 @@ class SWLCService:
                     # 解析3D号码
                     numbers = item['red'].split(',')
                     
+                    # 保存到数据库
+                    self.db.save_3d_result(
+                        period=item['code'],
+                        draw_date=item['date'],
+                        numbers=numbers
+                    )
+                    
                     result = LotteryResult(
                         lottery_type="福彩3D",
                         period=item['code'],
@@ -261,6 +441,14 @@ class SWLCService:
                     basic_numbers = item['red'].split(',')
                     special_number = item['blue']
                     
+                    # 保存到数据库
+                    self.db.save_qlc_result(
+                        period=item['code'],
+                        draw_date=item['date'],
+                        basic_numbers=basic_numbers,
+                        special_number=special_number
+                    )
+                    
                     result = LotteryResult(
                         lottery_type="七乐彩",
                         period=item['code'],
@@ -272,6 +460,13 @@ class SWLCService:
                 elif lottery_type == "快乐8":
                     # 解析快乐8号码 (20个号码)
                     numbers = item['red'].split(',')
+                    
+                    # 保存到数据库
+                    self.db.save_kl8_result(
+                        period=item['code'],
+                        draw_date=item['date'],
+                        numbers=numbers
+                    )
                     
                     result = LotteryResult(
                         lottery_type="快乐8",
@@ -292,6 +487,30 @@ class SWLCService:
     
     def analyze_numbers(self, results: List[LotteryResult]) -> LotteryAnalysis:
         """分析号码统计"""
+        # 首先尝试从数据库获取统计信息
+        if results:
+            lottery_type = results[0].lottery_type
+            db_stats = self.db.get_number_statistics(lottery_type)
+            if db_stats:
+                logger.info(f"从本地数据库获取{lottery_type}号码统计")
+                # 排序找出热号和冷号
+                sorted_nums = sorted(db_stats.items(), key=lambda x: x[1], reverse=True)
+                hot_numbers = [num for num, _ in sorted_nums[:10]]
+                cold_numbers = [num for num, _ in sorted_nums[-10:]]
+                
+                return LotteryAnalysis(
+                    hot_numbers=hot_numbers,
+                    cold_numbers=cold_numbers,
+                    frequency_stats=db_stats,
+                    consecutive_analysis={
+                        "total_periods": len(results),
+                        "most_frequent": sorted_nums[0] if sorted_nums else ("", 0),
+                        "least_frequent": sorted_nums[-1] if sorted_nums else ("", 0)
+                    }
+                )
+        
+        # 如果数据库没有统计信息，从结果中计算
+        logger.info("从结果数据计算号码统计")
         frequency = {}
         all_numbers = []
         
@@ -468,6 +687,37 @@ def create_swlc_server() -> Server:
                     },
                     "required": ["lottery_type"]
                 }
+            ),
+            types.Tool(
+                name="sync_lottery_data",
+                description="同步指定彩票类型的最新数据到本地数据库",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "lottery_type": {
+                            "type": "string",
+                            "enum": ["双色球", "福彩3D", "七乐彩", "快乐8"],
+                            "description": "彩票类型"
+                        },
+                        "periods": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 50,
+                            "default": 10,
+                            "description": "同步期数"
+                        }
+                    },
+                    "required": ["lottery_type"]
+                }
+            ),
+            types.Tool(
+                name="get_database_info",
+                description="获取本地数据库统计信息",
+                inputSchema={
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
             )
         ]
     
@@ -596,6 +846,54 @@ def create_swlc_server() -> Server:
                     type="text",
                     text=f"{lottery_type}随机号码推荐：\n\n" + "\n".join(results)
                 )]
+            
+            elif name == "sync_lottery_data":
+                lottery_type = arguments.get("lottery_type")
+                periods = arguments.get("periods", 10)
+                
+                try:
+                    # 从网络获取数据并保存到数据库
+                    results = await lottery_service.get_historical_data(lottery_type, periods)
+                    if results:
+                        # 记录同步日志
+                        lottery_service.db.log_sync(lottery_type, len(results))
+                        return [types.TextContent(
+                            type="text",
+                            text=f"成功同步{lottery_type}数据{len(results)}期到本地数据库"
+                        )]
+                    else:
+                        lottery_service.db.log_sync(lottery_type, 0, 'failed', '获取数据失败')
+                        return [types.TextContent(type="text", text=f"同步{lottery_type}数据失败")]
+                except Exception as e:
+                    lottery_service.db.log_sync(lottery_type, 0, 'failed', str(e))
+                    return [types.TextContent(type="text", text=f"同步{lottery_type}数据失败：{str(e)}")]
+            
+            elif name == "get_database_info":
+                try:
+                    info = lottery_service.db.get_database_info()
+                    text_lines = ["本地数据库统计信息：\n"]
+                    
+                    # 各表记录数
+                    text_lines.append("各彩票类型记录数：")
+                    for table, count in info.items():
+                        if table != 'last_sync':
+                            lottery_name = {
+                                'ssq_results': '双色球',
+                                'fucai3d_results': '福彩3D', 
+                                'qilecai_results': '七乐彩',
+                                'kuaile8_results': '快乐8'
+                            }.get(table, table)
+                            text_lines.append(f"- {lottery_name}: {count}期")
+                    
+                    # 最新同步时间
+                    if 'last_sync' in info and info['last_sync']:
+                        text_lines.append("\n最新同步时间：")
+                        for lottery_type, sync_time in info['last_sync'].items():
+                            text_lines.append(f"- {lottery_type}: {sync_time}")
+                    
+                    return [types.TextContent(type="text", text="\n".join(text_lines))]
+                except Exception as e:
+                    return [types.TextContent(type="text", text=f"获取数据库信息失败：{str(e)}")]
             
             else:
                 return [types.TextContent(type="text", text=f"未知工具：{name}")]
