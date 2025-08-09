@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-上海彩票MCP服务器启动脚本
+SWLC MCP服务器启动脚本
 支持启动MCP服务器或HTTP API服务器
 """
 
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 def main():
     """主函数"""
-    parser = argparse.ArgumentParser(description="上海彩票MCP服务器启动脚本")
+    parser = argparse.ArgumentParser(description="SWLC MCP服务器启动脚本")
     parser.add_argument(
         "--mode", 
         choices=["mcp", "api"], 

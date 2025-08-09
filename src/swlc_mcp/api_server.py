@@ -1,5 +1,5 @@
 """
-上海彩票MCP Server HTTP API
+SWLC MCP Server HTTP API
 为MCP服务器提供HTTP接口，支持其他应用通过HTTP请求访问彩票数据
 """
 
@@ -15,13 +15,17 @@ import uvicorn
 
 from .server import SWLCService, LotteryResult
 
+# 导入新模块
+from .predictor import PredictionManager
+from .backtest import BacktestEngine
+
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # 创建FastAPI应用
 app = FastAPI(
-    title="上海彩票MCP API",
+    title="SWLC MCP API",
     description="提供彩票开奖数据查询和分析的HTTP API接口",
     version="1.0.0"
 )
@@ -38,11 +42,15 @@ app.add_middleware(
 # 初始化彩票服务
 lottery_service = SWLCService()
 
+# 初始化预测和回测引擎
+prediction_manager = PredictionManager()
+backtest_engine = BacktestEngine()
+
 @app.get("/")
 async def root():
     """API根路径"""
     return {
-        "message": "上海彩票MCP API服务",
+        "message": "SWLC MCP API服务",
         "version": "1.0.0",
         "timestamp": datetime.now().isoformat(),
         "endpoints": {
@@ -51,7 +59,10 @@ async def root():
             "analysis": "/api/analysis/{lottery_type}",
             "random": "/api/random/{lottery_type}",
             "sync": "/api/sync/{lottery_type}",
-            "database": "/api/database/info"
+            "database": "/api/database/info",
+            "predict": "/api/predict/{lottery_type}",
+            "backtest": "/api/backtest/{lottery_type}",
+            "settings": "/api/settings"
         }
     }
 
@@ -285,12 +296,148 @@ async def get_database_info():
         logger.error(f"获取数据库信息失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/predict/{lottery_type}")
+async def get_prediction(
+    lottery_type: str,
+    method: str = Query("rule", description="预测方法: rule, ai, hybrid"),
+    count: int = Query(5, ge=1, le=20, description="预测组数")
+):
+    """获取预测结果"""
+    try:
+        # 获取历史数据用于预测
+        historical_data = await lottery_service.get_historical_data(lottery_type, 50)
+        
+        if not historical_data:
+            raise HTTPException(status_code=404, detail="历史数据不足")
+        
+        # 转换为字典格式
+        history_dict = []
+        for result in historical_data:
+            history_dict.append({
+                'period': result.period,
+                'numbers': result.numbers,
+                'special_numbers': result.special_numbers,
+                'draw_date': result.draw_date
+            })
+        
+        # 执行预测
+        predictions = await prediction_manager.predict(
+            lottery_type, history_dict, method=method, count=count
+        )
+        
+        # 格式化结果
+        prediction_results = []
+        for pred in predictions:
+            prediction_results.append({
+                'numbers': pred.numbers,
+                'special_numbers': pred.special_numbers,
+                'confidence': pred.confidence,
+                'method': pred.method,
+                'timestamp': pred.timestamp,
+                'metadata': pred.metadata
+            })
+        
+        return {
+            "success": True,
+            "data": prediction_results,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"预测失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/backtest/{lottery_type}")
+async def run_backtest(
+    lottery_type: str,
+    window_size: int = Query(100, ge=50, le=500, description="窗口大小"),
+    step: int = Query(50, ge=10, le=100, description="步长")
+):
+    """运行回测分析"""
+    try:
+        # 获取历史数据
+        historical_data = await lottery_service.get_historical_data(lottery_type, window_size * 2)
+        
+        if len(historical_data) < window_size:
+            raise HTTPException(status_code=400, detail=f"历史数据不足，需要至少{window_size}期数据")
+        
+        # 转换为字典格式
+        history_dict = []
+        for result in historical_data:
+            history_dict.append({
+                'period': result.period,
+                'numbers': result.numbers,
+                'special_numbers': result.special_numbers,
+                'draw_date': result.draw_date
+            })
+        
+        # 执行回测
+        backtest_result = await backtest_engine.run_backtest(
+            lottery_type, history_dict, window_size=window_size, step=step
+        )
+        
+        return {
+            "success": True,
+            "data": {
+                "total_periods": backtest_result.total_periods,
+                "average_accuracy": backtest_result.average_accuracy,
+                "best_strategy": backtest_result.best_strategy,
+                "strategy_performance": backtest_result.strategy_performance,
+                "chart_data": backtest_result.chart_data,
+                "timestamp": backtest_result.timestamp
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"回测失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/settings")
+async def get_settings():
+    """获取系统设置"""
+    try:
+        # 这里将来会从配置文件或数据库读取设置
+        settings = {
+            "deepseek_key": "",
+            "openai_key": "",
+            "prediction_methods": ["rule", "ai", "hybrid"],
+            "default_lottery_type": "ssq"
+        }
+        
+        return {
+            "success": True,
+            "data": settings,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"获取设置失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/settings")
+async def save_settings(settings: Dict[str, Any]):
+    """保存系统设置"""
+    try:
+        # 这里将来会保存到配置文件或数据库
+        logger.info(f"保存设置: {settings}")
+        
+        return {
+            "success": True,
+            "message": "设置保存成功",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"保存设置失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/health")
 async def health_check():
     """健康检查"""
     return {
         "status": "healthy",
-        "service": "上海彩票MCP API",
+        "service": "SWLC MCP API",
         "timestamp": datetime.now().isoformat(),
         "database": "connected" if lottery_service.db else "disconnected"
     }

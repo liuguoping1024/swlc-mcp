@@ -76,12 +76,14 @@ python src/swlc_mcp/sync_data.py
 ### `get_historical_data`
 获取历史开奖数据
 - `lottery_type`: 彩票类型（双色球/福彩3D/七乐彩/快乐8）
-- `periods`: 获取期数（1-100，默认10）
+- `periods`: 获取期数（1-500，默认10）
+  - 如果数据库中的数据不足，会返回实际可用的数据
+  - 建议首次使用先同步数据：`python src/swlc_mcp/sync_data.py`
 
 ### `analyze_numbers`
 分析号码统计信息
 - `lottery_type`: 彩票类型（双色球/福彩3D/七乐彩/快乐8）
-- `periods`: 分析期数（5-100，默认30）
+- `periods`: 分析期数（5-500，默认30）
 
 ### `generate_random_numbers`
 生成随机号码推荐

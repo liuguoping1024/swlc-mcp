@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 HTTP API测试脚本
-用于测试上海彩票MCP服务器的HTTP API接口
+用于测试SWLC MCP服务器的HTTP API接口
 """
 
 import asyncio
@@ -38,7 +38,7 @@ async def test_api_endpoint(session: aiohttp.ClientSession, endpoint: str, metho
 
 async def run_api_tests():
     """运行API测试"""
-    print("🚀 开始测试上海彩票MCP HTTP API")
+    print("🚀 开始测试SWLC MCP HTTP API")
     print("=" * 50)
     
     async with aiohttp.ClientSession() as session:

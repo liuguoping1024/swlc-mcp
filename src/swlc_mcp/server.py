@@ -1,5 +1,5 @@
 """
-上海彩票MCP Server
+SWLC MCP Server
 
 提供上海地区彩票信息查询服务，包括：
 - 双色球开奖查询
@@ -636,7 +636,7 @@ def create_swlc_server() -> Server:
                         "periods": {
                             "type": "integer",
                             "minimum": 1,
-                            "maximum": 100,
+                            "maximum": 500,
                             "default": 10,
                             "description": "获取期数"
                         }
@@ -658,7 +658,7 @@ def create_swlc_server() -> Server:
                         "periods": {
                             "type": "integer",
                             "minimum": 5,
-                            "maximum": 100,
+                            "maximum": 500,
                             "default": 30,
                             "description": "分析期数"
                         }
