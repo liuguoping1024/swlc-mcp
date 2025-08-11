@@ -168,23 +168,80 @@ async def get_number_analysis(
         
         results = await lottery_service.get_historical_data(chinese_type, periods)
         
-        if results:
-            analysis = lottery_service.analyze_numbers(results)
-            
-            return {
-                "success": True,
-                "data": {
-                    "lottery_type": chinese_type,
-                    "analysis_periods": periods,
-                    "hot_numbers": analysis.hot_numbers,
-                    "cold_numbers": analysis.cold_numbers,
-                    "frequency_stats": analysis.frequency_stats,
-                    "consecutive_analysis": analysis.consecutive_analysis
-                },
-                "timestamp": datetime.now().isoformat()
-            }
-        else:
+        if not results:
             raise HTTPException(status_code=404, detail="未找到数据进行分析")
+        
+        # 基于本次 results 直接计算频次，严格遵循 periods
+        def norm(n: str) -> str:
+            try:
+                return f"{int(n):02d}"
+            except Exception:
+                return n
+        freq: Dict[str, int] = {}
+        for r in results:
+            for n in (r.numbers or []):
+                nn = norm(n)
+                freq[nn] = freq.get(nn, 0) + 1
+            for n in (r.special_numbers or []):
+                nn = norm(n)
+                freq[nn] = freq.get(nn, 0) + 1
+        
+        # 若 distinct 数量过少，用候选全集补0计数，保证可选数量
+        def build_universe(ltype: str) -> List[str]:
+            if ltype == "双色球":
+                # 红1-33 + 蓝1-16
+                red = [f"{i:02d}" for i in range(1, 34)]
+                blue = [f"{i:02d}" for i in range(1, 17)]
+                return list(dict.fromkeys(red + blue))
+            if ltype == "福彩3D":
+                return [str(i) for i in range(10)]
+            if ltype == "七乐彩":
+                base = [f"{i:02d}" for i in range(1, 31)]
+                return base
+            if ltype == "快乐8":
+                return [f"{i:02d}" for i in range(1, 81)]
+            return []
+        universe = build_universe(chinese_type)
+        for u in universe:
+            if u not in freq:
+                freq[u] = 0
+        
+        # 排序与分配热门/冷门
+        sorted_all = sorted(freq.items(), key=lambda x: (-x[1], int(x[0]) if x[0].isdigit() else 0))
+        asc_all = list(reversed(sorted_all))
+        total = len(sorted_all)
+        
+        # 至少5，最多10，且确保另一侧也能至少5
+        k = max(5, min(10, total // 2))
+        if total - k < 5:
+            k = max(5, total - 5)
+        k = max(5, min(k, total))
+        
+        hot_pairs = sorted_all[:k]
+        hot_set = {k for k, _ in hot_pairs}
+        cold_pairs: List[Any] = []
+        for knum, v in asc_all:
+            if knum in hot_set:
+                continue
+            cold_pairs.append((knum, v))
+            if len(cold_pairs) >= k:
+                break
+        
+        hot_obj = {k2: int(v2) for k2, v2 in hot_pairs}
+        cold_obj = {k2: int(v2) for k2, v2 in cold_pairs}
+        
+        return {
+            "success": True,
+            "data": {
+                "lottery_type": chinese_type,
+                "analysis_periods": periods,
+                "hot_numbers": hot_obj,
+                "cold_numbers": cold_obj,
+                # 连号分析暂保留为基于 analyze 的结果（不影响热门冷门）
+                "consecutive_analysis": lottery_service.analyze_numbers(results).consecutive_analysis
+            },
+            "timestamp": datetime.now().isoformat()
+        }
             
     except Exception as e:
         logger.error(f"获取号码分析失败: {e}")
@@ -299,50 +356,49 @@ async def get_database_info():
 @app.get("/api/predict/{lottery_type}")
 async def get_prediction(
     lottery_type: str,
-    method: str = Query("rule", description="预测方法: rule, ai, hybrid"),
-    count: int = Query(5, ge=1, le=20, description="预测组数")
+    method: str = Query("rule", description="预测方法: rule"),
+    count: int = Query(5, ge=1, le=20, description="预测组数"),
+    strategy: str = Query("all", description="策略: all|balanced|cold_recovery|hot_focus|interval_balance|contrarian")
 ):
-    """获取预测结果"""
+    """获取预测结果（支持策略）"""
     try:
-        # 获取历史数据用于预测
-        historical_data = await lottery_service.get_historical_data(lottery_type, 50)
+        # 统一类型映射
+        lottery_type_map = {
+            "ssq": "双色球",
+            "3d": "福彩3D",
+            "qlc": "七乐彩",
+            "kl8": "快乐8"
+        }
+        chinese_type = lottery_type_map.get(lottery_type, lottery_type)
         
-        if not historical_data:
+        # 历史数据用于预测
+        hist = await lottery_service.get_historical_data(chinese_type, 120)
+        if not hist:
             raise HTTPException(status_code=404, detail="历史数据不足")
+        history_dict = [{
+            'period': r.period,
+            'numbers': r.numbers,
+            'special_numbers': r.special_numbers,
+            'draw_date': r.draw_date
+        } for r in hist]
         
-        # 转换为字典格式
-        history_dict = []
-        for result in historical_data:
-            history_dict.append({
-                'period': result.period,
-                'numbers': result.numbers,
-                'special_numbers': result.special_numbers,
-                'draw_date': result.draw_date
+        preds = await prediction_manager.predict(chinese_type, history_dict, method=method, count=count, strategy=strategy)
+        
+        out = []
+        for p in preds:
+            out.append({
+                'numbers': p.numbers,
+                'special_numbers': p.special_numbers,
+                'confidence': p.confidence,
+                'method': p.method,
+                'timestamp': p.timestamp,
+                'metadata': p.metadata
             })
-        
-        # 执行预测
-        predictions = await prediction_manager.predict(
-            lottery_type, history_dict, method=method, count=count
-        )
-        
-        # 格式化结果
-        prediction_results = []
-        for pred in predictions:
-            prediction_results.append({
-                'numbers': pred.numbers,
-                'special_numbers': pred.special_numbers,
-                'confidence': pred.confidence,
-                'method': pred.method,
-                'timestamp': pred.timestamp,
-                'metadata': pred.metadata
-            })
-        
         return {
             "success": True,
-            "data": prediction_results,
+            "data": out,
             "timestamp": datetime.now().isoformat()
         }
-        
     except Exception as e:
         logger.error(f"预测失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -24,156 +24,145 @@ class PredictionResult:
 class RuleBasedPredictor:
     """基于规则的预测算法"""
     
-    def __init__(self):
-        self.rules = {
-            'ssq': {'red_count': 6, 'red_range': (1, 33), 'blue_count': 1, 'blue_range': (1, 16)},
-            '3d': {'count': 3, 'range': (0, 9)},
-            'qlc': {'red_count': 7, 'red_range': (1, 30), 'blue_count': 1, 'blue_range': (1, 30)},
-            'kl8': {'count': 20, 'range': (1, 80)}
-        }
-    
-    def predict(self, lottery_type: str, historical_data: List[Dict], count: int = 5) -> List[PredictionResult]:
-        """基于历史数据的规则预测"""
-        if lottery_type not in self.rules:
+    def predict(self, lottery_type: str, historical_data: List[Dict], count: int = 5, strategy: Optional[str] = None) -> List[PredictionResult]:
+        """基于历史数据的规则预测，支持策略"""
+        if lottery_type not in {"ssq", "3d", "qlc", "kl8", "双色球", "福彩3D", "七乐彩", "快乐8"}:
             raise ValueError(f"不支持的彩票类型: {lottery_type}")
         
-        results = []
-        number_freq = self._analyze_frequency(historical_data, lottery_type)
-        hot_numbers = self._get_hot_numbers(number_freq, lottery_type)
-        cold_numbers = self._get_cold_numbers(number_freq, lottery_type)
+        # 仅实现双色球策略，其它类型先回退到简单规则
+        if lottery_type in ("ssq", "双色球"):
+            return self._predict_ssq_with_strategies(historical_data, strategy, count)
         
-        for i in range(count):
-            if lottery_type == 'ssq':
-                prediction = self._predict_ssq(hot_numbers, cold_numbers)
-            elif lottery_type == '3d':
-                prediction = self._predict_3d(hot_numbers, cold_numbers)
-            elif lottery_type == 'qlc':
-                prediction = self._predict_qlc(hot_numbers, cold_numbers)
-            elif lottery_type == 'kl8':
-                prediction = self._predict_kl8(hot_numbers, cold_numbers)
+        # 非双色球回退：简单随机+频率权重
+        return self._predict_fallback(historical_data, count)
+    
+    def _predict_ssq_with_strategies(self, historical_data: List[Dict], strategy: Optional[str], count: int) -> List[PredictionResult]:
+        # 计算频次
+        freq: Dict[str, int] = {}
+        blue_freq: Dict[str, int] = {}
+        for d in historical_data:
+            for n in d.get('numbers', []):
+                freq[n] = freq.get(n, 0) + 1
+            for n in (d.get('special_numbers') or []):
+                blue_freq[n] = blue_freq.get(n, 0) + 1
+        # 归一化全集
+        all_red = [f"{i:02d}" for i in range(1, 34)]
+        for n in all_red:
+            freq.setdefault(n, 0)
+        all_blue = [f"{i:02d}" for i in range(1, 17)]
+        for n in all_blue:
+            blue_freq.setdefault(n, 0)
+        
+        hot = sorted(freq.items(), key=lambda x: (-x[1], int(x[0])))
+        cold = sorted(freq.items(), key=lambda x: (x[1], int(x[0])))
+        medium = [k for k, v in sorted(freq.items(), key=lambda x: (abs(x[1] - (sum(freq.values())/len(freq) if freq else 0)), int(x[0])))]
+        blue_sorted = sorted(blue_freq.items(), key=lambda x: (-x[1], int(x[0])))
+        
+        def pick_distinct(candidates: List[str], k: int, exclude: Optional[set] = None) -> List[str]:
+            res = []
+            seen = set(exclude or set())
+            for n in candidates:
+                if n in seen:
+                    continue
+                res.append(n)
+                seen.add(n)
+                if len(res) >= k:
+                    break
+            # 不足则随机补齐
+            if len(res) < k:
+                pool = [x for x in all_red if x not in seen]
+                random.shuffle(pool)
+                res.extend(pool[:(k - len(res))])
+            return sorted(res, key=lambda x: int(x))
+        
+        def blue_pick(top_k: int = 4) -> str:
+            pool = [b for b, _ in blue_sorted[:top_k]] or all_blue
+            return random.choice(pool)
+        
+        strategies = {
+            'balanced': '热冷均衡型',
+            'cold_recovery': '冷门回补型',
+            'hot_focus': '热门集中型',
+            'interval_balance': '区间平衡型',
+            'contrarian': '反向思维型'
+        }
+        
+        results: List[PredictionResult] = []
+        to_run: List[str]
+        if strategy in (None, '', 'all'):
+            to_run = ['balanced', 'cold_recovery', 'hot_focus', 'interval_balance', 'contrarian']
+        else:
+            to_run = [strategy]
+        
+        for strat in to_run:
+            if strat == 'balanced':
+                red = pick_distinct([k for k, _ in hot] + [k for k, _ in cold], 6)
+            elif strat == 'cold_recovery':
+                red = pick_distinct([k for k, _ in cold] + medium + [k for k, _ in hot], 6)
+            elif strat == 'hot_focus':
+                red = pick_distinct([k for k, _ in hot] + medium, 6)
+            elif strat == 'interval_balance':
+                # 每区间各取2个：1-11,12-22,23-33，优先中频次
+                seg1 = [n for n in medium if 1 <= int(n) <= 11] + [k for k, _ in hot if 1 <= int(k) <= 11]
+                seg2 = [n for n in medium if 12 <= int(n) <= 22] + [k for k, _ in hot if 12 <= int(k) <= 22]
+                seg3 = [n for n in medium if 23 <= int(n) <= 33] + [k for k, _ in hot if 23 <= int(k) <= 33]
+                r1 = pick_distinct(seg1, 2)
+                r2 = pick_distinct(seg2, 2, exclude=set(r1))
+                r3 = pick_distinct(seg3, 2, exclude=set(r1 + r2))
+                red = sorted(list(set(r1 + r2 + r3)), key=lambda x: int(x))
+            elif strat == 'contrarian':
+                # 避开最热与连号，偏向冷门与分散
+                base = [k for k, _ in cold] + medium
+                cand = []
+                for n in base:
+                    if cand and int(n) == int(cand[-1]) + 1:
+                        continue
+                    cand.append(n)
+                red = pick_distinct(cand, 6)
             else:
-                continue
-            
-            confidence = self._calculate_confidence(prediction, historical_data)
-            
+                red = pick_distinct([k for k, _ in hot] + [k for k, _ in cold], 6)
+            blue = blue_pick()
             results.append(PredictionResult(
-                numbers=prediction['numbers'],
-                special_numbers=prediction.get('special_numbers'),
-                confidence=confidence,
-                method='rule',
+                numbers=red,
+                special_numbers=[blue],
+                confidence=0.0,
+                method=strategies.get(strat, strat),
                 timestamp=datetime.now().isoformat(),
-                metadata={'hot_numbers': hot_numbers[:5], 'cold_numbers': cold_numbers[:5]}
+                metadata={"strategy": strat}
             ))
         
+        # 若用户只选单一策略且需要多组，补齐到 count 组（随机扰动）
+        if strategy not in (None, '', 'all') and len(results) < count:
+            extra_needed = count - len(results)
+            for _ in range(extra_needed):
+                jitter = [k for k, _ in hot][:10] + [k for k, _ in cold][:10]
+                random.shuffle(jitter)
+                red = pick_distinct(jitter, 6)
+                blue = blue_pick()
+                results.append(PredictionResult(
+                    numbers=red,
+                    special_numbers=[blue],
+                    confidence=0.0,
+                    method=strategies.get(strategy, strategy),
+                    timestamp=datetime.now().isoformat(),
+                    metadata={"strategy": strategy, "jitter": True}
+                ))
         return results
     
-    def _analyze_frequency(self, historical_data: List[Dict], lottery_type: str) -> Dict[str, int]:
-        """分析号码频率"""
-        frequency = {}
-        for data in historical_data:
-            numbers = data.get('numbers', [])
-            for num in numbers:
-                frequency[num] = frequency.get(num, 0) + 1
-        return frequency
-    
-    def _get_hot_numbers(self, frequency: Dict[str, int], lottery_type: str) -> List[str]:
-        """获取热门号码"""
-        sorted_numbers = sorted(frequency.items(), key=lambda x: x[1], reverse=True)
-        return [num for num, _ in sorted_numbers]
-    
-    def _get_cold_numbers(self, frequency: Dict[str, int], lottery_type: str) -> List[str]:
-        """获取冷门号码"""
-        all_numbers = set()
-        if lottery_type == 'ssq':
-            all_numbers = set(str(i).zfill(2) for i in range(1, 34))
-        elif lottery_type == '3d':
-            all_numbers = set(str(i) for i in range(10))
-        elif lottery_type == 'qlc':
-            all_numbers = set(str(i).zfill(2) for i in range(1, 31))
-        elif lottery_type == 'kl8':
-            all_numbers = set(str(i).zfill(2) for i in range(1, 81))
-        
-        appeared_numbers = set(frequency.keys())
-        cold_numbers = list(all_numbers - appeared_numbers)
-        random.shuffle(cold_numbers)
-        return cold_numbers
-    
-    def _predict_ssq(self, hot_numbers: List[str], cold_numbers: List[str]) -> Dict:
-        """预测双色球"""
-        red_numbers = []
-        red_numbers.extend(hot_numbers[:3])
-        red_numbers.extend(cold_numbers[:3])
-        red_numbers = red_numbers[:6]
-        
-        blue_numbers = hot_numbers[:5] if hot_numbers else [str(i).zfill(2) for i in range(1, 17)]
-        blue_number = random.choice(blue_numbers)
-        
-        return {
-            'numbers': sorted(red_numbers, key=int),
-            'special_numbers': [blue_number]
-        }
-    
-    def _predict_3d(self, hot_numbers: List[str], cold_numbers: List[str]) -> Dict:
-        """预测福彩3D"""
-        numbers = []
-        numbers.extend(hot_numbers[:2])
-        numbers.extend(cold_numbers[:1])
-        numbers = numbers[:3]
-        
-        while len(numbers) < 3:
-            num = str(random.randint(0, 9))
-            if num not in numbers:
-                numbers.append(num)
-        
-        return {'numbers': numbers}
-    
-    def _predict_qlc(self, hot_numbers: List[str], cold_numbers: List[str]) -> Dict:
-        """预测七乐彩"""
-        red_numbers = []
-        red_numbers.extend(hot_numbers[:4])
-        red_numbers.extend(cold_numbers[:3])
-        red_numbers = red_numbers[:7]
-        
-        blue_numbers = hot_numbers[:5] if hot_numbers else [str(i).zfill(2) for i in range(1, 31)]
-        blue_number = random.choice(blue_numbers)
-        
-        return {
-            'numbers': sorted(red_numbers, key=int),
-            'special_numbers': [blue_number]
-        }
-    
-    def _predict_kl8(self, hot_numbers: List[str], cold_numbers: List[str]) -> Dict:
-        """预测快乐8"""
-        numbers = []
-        numbers.extend(hot_numbers[:10])
-        numbers.extend(cold_numbers[:10])
-        numbers = numbers[:20]
-        
-        while len(numbers) < 20:
-            num = str(random.randint(1, 80)).zfill(2)
-            if num not in numbers:
-                numbers.append(num)
-        
-        return {'numbers': sorted(numbers, key=int)}
-    
-    def _calculate_confidence(self, prediction: Dict, historical_data: List[Dict]) -> float:
-        """计算预测置信度"""
-        if not historical_data:
-            return 0.5
-        
-        numbers = prediction['numbers']
-        special_numbers = prediction.get('special_numbers', [])
-        all_numbers = numbers + special_numbers
-        
-        total_appearances = 0
-        for data in historical_data:
-            historical_numbers = data.get('numbers', []) + data.get('special_numbers', [])
-            for num in all_numbers:
-                if num in historical_numbers:
-                    total_appearances += 1
-        
-        confidence = min(0.9, max(0.1, total_appearances / (len(historical_data) * len(all_numbers))))
-        return round(confidence, 2)
+    def _predict_fallback(self, historical_data: List[Dict], count: int) -> List[PredictionResult]:
+        results: List[PredictionResult] = []
+        for _ in range(count):
+            numbers = sorted(random.sample(range(1, 34), 6))
+            blue = random.randint(1, 16)
+            results.append(PredictionResult(
+                numbers=[f"{n:02d}" for n in numbers],
+                special_numbers=[f"{blue:02d}"],
+                confidence=0.0,
+                method='rule',
+                timestamp=datetime.now().isoformat(),
+                metadata={"fallback": True}
+            ))
+        return results
 
 class PredictionManager:
     """预测管理器"""
@@ -182,15 +171,11 @@ class PredictionManager:
         self.rule_predictor = RuleBasedPredictor()
     
     async def predict(self, lottery_type: str, historical_data: List[Dict], 
-                     method: str = 'rule', count: int = 5) -> List[PredictionResult]:
+                     method: str = 'rule', count: int = 5, strategy: Optional[str] = None) -> List[PredictionResult]:
         """执行预测"""
         try:
-            if method == 'rule':
-                return self.rule_predictor.predict(lottery_type, historical_data, count)
-            else:
-                # 暂时只支持规则预测
-                return self.rule_predictor.predict(lottery_type, historical_data, count)
-                
+            # 目前仅实现规则+策略
+            return self.rule_predictor.predict(lottery_type, historical_data, count=count, strategy=strategy)
         except Exception as e:
             logger.error(f"预测失败: {e}")
-            return self.rule_predictor.predict(lottery_type, historical_data, count)
+            return self.rule_predictor.predict(lottery_type, historical_data, count=count, strategy=strategy)

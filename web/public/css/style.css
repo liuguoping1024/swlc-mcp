@@ -120,7 +120,7 @@ body {
 /* 新增：两列布局 */
 .dashboard-columns {
     display: grid;
-    grid-template-columns: 2fr 3fr; /* 左侧较窄，右侧较宽给历史数据 */
+    grid-template-columns: 45% 55%; /* 左45%，右55% */
     gap: 20px;
 }
 
@@ -130,8 +130,9 @@ body {
     gap: 20px;
 }
 
+/* 右侧历史记录表格高度 */
 .right-column .data-table {
-    max-height: 70vh;
+    max-height: 140vh; /* 原70vh加倍 */
     overflow: auto;
 }
 
@@ -344,4 +345,71 @@ button:hover {
     padding: 10px;
     border-radius: 8px;
     border-left: 4px solid #48bb78;
+}
+
+/* 号码统计可视化 */
+.number-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.number-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 20px;
+    background: #edf2f7;
+    color: #2d3748;
+    font-weight: 600;
+}
+
+.number-chip.hot {
+    background: linear-gradient(45deg, #fed7d7, #feb2b2);
+    color: #742a2a;
+}
+
+.number-chip.cold {
+    background: linear-gradient(45deg, #e2e8f0, #cbd5e0);
+    color: #2d3748;
+}
+
+.number-chip .badge {
+    background: #1a202c;
+    color: #fff;
+    border-radius: 10px;
+    font-size: 12px;
+    padding: 2px 6px;
+}
+
+.stat-section {
+    margin-bottom: 14px;
+}
+
+.stat-section h4 {
+    margin-bottom: 8px;
+    color: #2d3748;
+}
+
+.heat-bar {
+    height: 6px;
+    background: #e2e8f0;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 6px;
+}
+
+.heat-bar > span {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, #63b3ed, #2b6cb0);
+    width: 0%;
+}
+
+/* 提示样式 */
+.note {
+    font-size: 12px;
+    color: #718096;
+    margin-top: 6px;
 }

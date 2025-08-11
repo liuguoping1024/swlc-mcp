@@ -159,6 +159,9 @@ async function loadHistoricalData() {
             
             html += '</tbody></table>';
             dataDiv.innerHTML = html;
+            
+            // 历史数据刷新后，重新计算号码统计
+            await loadNumberStats();
         } else {
             dataDiv.innerHTML = '<div class="error">获取历史数据失败</div>';
         }
@@ -174,37 +177,78 @@ async function loadNumberStats() {
     statsDiv.innerHTML = '<div class="loading">加载中...</div>';
     
     try {
-        const response = await fetch(`/api/analysis/${currentLotteryType}?periods=30`);
+        const periodsInput = document.getElementById('periods');
+        const periods = periodsInput ? periodsInput.value : 30;
+        const response = await fetch(`/api/analysis/${currentLotteryType}?periods=${periods}`);
         const data = await response.json();
         
         if (data.success && data.data) {
             const stats = data.data;
-            let html = '<div class="stats-grid">';
+            const hotMap = stats.hot_numbers || {};
+            const coldMap = stats.cold_numbers || {};
+            
+            // 排序：热门(降序)，冷门(升序)
+            const hotEntries = Object.entries(hotMap).sort((a, b) => Number(b[1]) - Number(a[1]) || Number(a[0]) - Number(b[0]));
+            const coldEntries = Object.entries(coldMap).sort((a, b) => Number(a[1]) - Number(b[1]) || Number(a[0]) - Number(b[0]));
+            
+            // 计算最大频次用于热度条
+            const maxFreq = Math.max(1, ...hotEntries.map(([, c]) => Number(c)), ...coldEntries.map(([, c]) => Number(c)));
+            
+            let html = '';
             
             // 热门号码
-            if (stats.hot_numbers) {
+            if (hotEntries.length) {
                 html += '<div class="stat-section">';
-                html += '<h4>热门号码</h4>';
-                html += '<div class="number-list">';
-                stats.hot_numbers.forEach(num => {
-                    html += `<span class="stat-number hot">${num}</span>`;
+                html += `<h4>热门号码（最近${stats.analysis_periods}期）</h4>`;
+                html += '<div class="number-grid">';
+                hotEntries.forEach(([num, cnt]) => {
+                    const pct = Math.round((Number(cnt) / maxFreq) * 100);
+                    html += `
+                        <div>
+                            <span class="number-chip hot">
+                                <span>${num}</span>
+                                <span class="badge">${cnt}</span>
+                            </span>
+                            <div class="heat-bar"><span style="width:${pct}%"></span></div>
+                        </div>
+                    `;
                 });
-                html += '</div></div>';
+                html += '</div>';
+                html += '<div class="note">徽章＝出现次数，蓝色条＝相对热度</div>';
+                html += '</div>';
             }
             
             // 冷门号码
-            if (stats.cold_numbers) {
+            if (coldEntries.length) {
                 html += '<div class="stat-section">';
-                html += '<h4>冷门号码</h4>';
-                html += '<div class="number-list">';
-                stats.cold_numbers.forEach(num => {
-                    html += `<span class="stat-number cold">${num}</span>`;
+                html += `<h4>冷门号码（最近${stats.analysis_periods}期）</h4>`;
+                html += '<div class="number-grid">';
+                coldEntries.forEach(([num, cnt]) => {
+                    const pct = Math.round((Number(cnt) / maxFreq) * 100);
+                    html += `
+                        <div>
+                            <span class="number-chip cold">
+                                <span>${num}</span>
+                                <span class="badge">${cnt}</span>
+                            </span>
+                            <div class="heat-bar"><span style="width:${pct}%"></span></div>
+                        </div>
+                    `;
                 });
-                html += '</div></div>';
+                html += '</div>';
+                html += '</div>';
             }
             
-            html += '</div>';
-            statsDiv.innerHTML = html;
+            // 连号分析
+            if (stats.consecutive_analysis) {
+                const ca = stats.consecutive_analysis;
+                html += '<div class="stat-section">';
+                html += `<h4>连号分析</h4>`;
+                html += `<div class="note">统计期数：${ca.total_periods}；最高频：${Array.isArray(ca.most_frequent)? ca.most_frequent.join(' / ') : ''}；最低频：${Array.isArray(ca.least_frequent)? ca.least_frequent.join(' / ') : ''}</div>`;
+                html += '</div>';
+            }
+            
+            statsDiv.innerHTML = html || '<div class="note">暂无统计数据</div>';
         } else {
             statsDiv.innerHTML = '<div class="error">获取统计数据失败</div>';
         }
@@ -217,13 +261,15 @@ async function loadNumberStats() {
 // 生成预测
 async function generatePrediction() {
     const resultsDiv = document.getElementById('predictionResults');
-    const method = document.getElementById('predictionMethod').value;
+    const method = document.getElementById('predictionMethod') ? document.getElementById('predictionMethod').value : 'rule';
     const count = document.getElementById('predictionCount').value;
+    const strategy = document.getElementById('predictionStrategy') ? document.getElementById('predictionStrategy').value : 'all';
+    const ptype = document.getElementById('predictLotteryType') ? document.getElementById('predictLotteryType').value : currentLotteryType;
     
     resultsDiv.innerHTML = '<div class="loading">生成预测中...</div>';
     
     try {
-        const response = await fetch(`/api/predict/${currentLotteryType}?method=${method}&count=${count}`);
+        const response = await fetch(`/api/predict/${ptype}?method=${method}&count=${count}&strategy=${strategy}`);
         const data = await response.json();
         
         if (data.success && data.data) {
@@ -233,7 +279,7 @@ async function generatePrediction() {
             predictions.forEach((prediction, index) => {
                 html += `
                     <div class="prediction-item">
-                        <h4>预测组合 ${index + 1}</h4>
+                        <h4>预测组合 ${index + 1}（${prediction.method}）</h4>
                         <div class="lottery-numbers">
                             ${prediction.numbers.map(num => 
                                 `<div class="number-ball red-ball">${num}</div>`
@@ -242,10 +288,7 @@ async function generatePrediction() {
                                 `<div class="number-ball blue-ball">${num}</div>`
                             ).join('') : ''}
                         </div>
-                        <div class="prediction-meta">
-                            <span>置信度: ${prediction.confidence}%</span>
-                            <span>方法: ${prediction.method}</span>
-                        </div>
+                        ${prediction.metadata && prediction.metadata.strategy ? `<div class="note">策略: ${prediction.metadata.strategy}</div>` : ''}
                     </div>
                 `;
             });

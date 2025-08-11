@@ -66,7 +66,7 @@
                         <div class="card">
                             <h3>历史数据</h3>
                             <div class="controls">
-                                <input type="number" id="periods" value="50" min="1" max="100" placeholder="期数">
+                                <input type="number" id="periods" value="60" min="1" max="500" placeholder="期数">
                                 <button onclick="loadHistoricalData()">查询</button>
                             </div>
                             <div id="historicalData" class="data-table">
@@ -81,14 +81,24 @@
             <div id="prediction" class="tab-content">
                 <div class="prediction-panel">
                     <div class="prediction-controls">
-                        <select id="predictionMethod">
-                            <option value="rule">规则算法</option>
-                            <option value="ai">AI预测</option>
-                            <option value="hybrid">混合算法</option>
+                        <select id="predictLotteryType">
+                            <option value="ssq">双色球</option>
+                            <option value="3d">福彩3D</option>
+                            <option value="qlc">七乐彩</option>
+                            <option value="kl8">快乐8</option>
+                        </select>
+                        <select id="predictionStrategy">
+                            <option value="all">全部策略</option>
+                            <option value="balanced">热冷均衡型</option>
+                            <option value="cold_recovery">冷门回补型</option>
+                            <option value="hot_focus">热门集中型</option>
+                            <option value="interval_balance">区间平衡型</option>
+                            <option value="contrarian">反向思维型</option>
                         </select>
                         <input type="number" id="predictionCount" value="5" min="1" max="20" placeholder="预测组数">
                         <button onclick="generatePrediction()">生成预测</button>
                     </div>
+                    <div class="note">策略说明：热冷均衡型 / 冷门回补型 / 热门集中型 / 区间平衡型 / 反向思维型</div>
                     <div id="predictionResults" class="prediction-results">
                         <div class="loading">等待预测...</div>
                     </div>
