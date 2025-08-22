@@ -59,10 +59,15 @@ async def root():
             "analysis": "/api/analysis/{lottery_type}",
             "random": "/api/random/{lottery_type}",
             "sync": "/api/sync/{lottery_type}",
+            "force_sync": "/api/force-sync/{lottery_type}",
             "database": "/api/database/info",
             "predict": "/api/predict/{lottery_type}",
             "backtest": "/api/backtest/{lottery_type}",
             "settings": "/api/settings"
+        },
+        "description": {
+            "sync": "智能同步数据（根据数据新鲜度自动决定是否需要更新）",
+            "force_sync": "强制同步数据（忽略数据新鲜度检查，直接从网络获取最新数据）"
         }
     }
 
@@ -304,28 +309,62 @@ async def sync_lottery_data(
         if not chinese_type:
             raise HTTPException(status_code=400, detail="不支持的彩票类型")
         
+        # 获取历史数据（这会自动触发网络同步）
         results = await lottery_service.get_historical_data(chinese_type, periods)
         
-        if results:
-            # 记录同步日志
-            lottery_service.db.log_sync(chinese_type, len(results))
-            
+        return {
+            "success": True,
+            "message": f"成功同步{chinese_type}数据",
+            "data": {
+                "lottery_type": chinese_type,
+                "synced_periods": len(results),
+                "requested_periods": periods
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"同步彩票数据失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/force-sync/{lottery_type}")
+async def force_sync_lottery_data(
+    lottery_type: str,
+    periods: int = Query(20, ge=1, le=500, description="强制同步期数")
+):
+    """强制同步彩票数据（忽略数据新鲜度检查）"""
+    try:
+        lottery_type_map = {
+            "ssq": "双色球",
+            "3d": "福彩3D", 
+            "qlc": "七乐彩",
+            "kl8": "快乐8"
+        }
+        
+        chinese_type = lottery_type_map.get(lottery_type)
+        if not chinese_type:
+            raise HTTPException(status_code=400, detail="不支持的彩票类型")
+        
+        # 强制同步数据
+        sync_result = await lottery_service.force_sync_data(chinese_type, periods)
+        
+        if sync_result["success"]:
             return {
                 "success": True,
-                "message": f"成功同步{chinese_type}数据{len(results)}期",
+                "message": sync_result["message"],
                 "data": {
                     "lottery_type": chinese_type,
-                    "synced_periods": len(results),
-                    "sync_time": datetime.now().isoformat()
-                }
+                    "synced_count": sync_result["synced_count"],
+                    "total_available": sync_result["total_available"],
+                    "requested_periods": periods
+                },
+                "timestamp": datetime.now().isoformat()
             }
         else:
-            lottery_service.db.log_sync(chinese_type, 0, 'failed', '获取数据失败')
-            raise HTTPException(status_code=500, detail="同步数据失败")
-            
+            raise HTTPException(status_code=500, detail=sync_result["message"])
+        
     except Exception as e:
-        logger.error(f"同步数据失败: {e}")
-        lottery_service.db.log_sync(chinese_type, 0, 'failed', str(e))
+        logger.error(f"强制同步彩票数据失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/database/info")
