@@ -949,7 +949,7 @@ def create_swlc_server() -> Server:
                         "periods": {
                             "type": "integer",
                             "minimum": 1,
-                            "maximum": 500,
+                            "maximum": 1000,
                             "default": 10,
                             "description": "获取期数"
                         }
@@ -971,7 +971,7 @@ def create_swlc_server() -> Server:
                         "periods": {
                             "type": "integer",
                             "minimum": 5,
-                            "maximum": 500,
+                            "maximum": 1000,
                             "default": 30,
                             "description": "分析期数"
                         }

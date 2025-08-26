@@ -330,7 +330,7 @@ async def sync_lottery_data(
 @app.post("/api/force-sync/{lottery_type}")
 async def force_sync_lottery_data(
     lottery_type: str,
-    periods: int = Query(20, ge=1, le=500, description="强制同步期数")
+    periods: int = Query(20, ge=1, le=1000, description="强制同步期数")
 ):
     """强制同步彩票数据（忽略数据新鲜度检查）"""
     try:
