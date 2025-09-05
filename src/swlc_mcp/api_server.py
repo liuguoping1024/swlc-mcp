@@ -450,8 +450,20 @@ async def run_backtest(
 ):
     """运行回测分析"""
     try:
+        # 类型映射
+        lottery_type_map = {
+            "ssq": "双色球",
+            "3d": "福彩3D", 
+            "qlc": "七乐彩",
+            "kl8": "快乐8"
+        }
+        
+        chinese_type = lottery_type_map.get(lottery_type)
+        if not chinese_type:
+            raise HTTPException(status_code=400, detail="不支持的彩票类型")
+        
         # 获取历史数据
-        historical_data = await lottery_service.get_historical_data(lottery_type, window_size * 2)
+        historical_data = await lottery_service.get_historical_data(chinese_type, window_size * 2)
         
         if len(historical_data) < window_size:
             raise HTTPException(status_code=400, detail=f"历史数据不足，需要至少{window_size}期数据")

@@ -140,14 +140,14 @@ class BacktestEngine:
             if pred_special_numbers and actual_special_numbers:
                 blue_hits = len(set(pred_special_numbers) & set(actual_special_numbers))
             
-            # 根据彩票类型计算准确性
-            if lottery_type == 'ssq':
+            # 根据彩票类型计算准确性（支持中英文类型）
+            if lottery_type in ('ssq', '双色球'):
                 accuracy = self._calculate_ssq_accuracy(red_hits, blue_hits)
-            elif lottery_type == '3d':
+            elif lottery_type in ('3d', '福彩3D'):
                 accuracy = self._calculate_3d_accuracy(pred_numbers, actual_numbers)
-            elif lottery_type == 'qlc':
+            elif lottery_type in ('qlc', '七乐彩'):
                 accuracy = self._calculate_qlc_accuracy(red_hits, blue_hits)
-            elif lottery_type == 'kl8':
+            elif lottery_type in ('kl8', '快乐8'):
                 accuracy = self._calculate_kl8_accuracy(pred_numbers, actual_numbers)
             else:
                 accuracy = red_hits / len(actual_numbers) if actual_numbers else 0.0
