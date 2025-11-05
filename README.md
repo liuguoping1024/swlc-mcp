@@ -2,6 +2,10 @@
 
 这是一个专为上海地区设计的彩票信息查询MCP（Model Context Protocol）服务器，提供双色球、福彩3D、七乐彩等彩票的开奖查询和分析功能。
 
+<a href="https://glama.ai/mcp/servers/@liuguoping1024/swlc-mcp">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@liuguoping1024/swlc-mcp/badge" alt="SWLC Server MCP server" />
+</a>
+
 ## 功能特性
 
 - 🎯 **最新开奖查询**：获取双色球、福彩3D、七乐彩的最新开奖结果
@@ -10,7 +14,7 @@
 - 🎲 **随机推荐**：生成随机彩票号码推荐
 - 🔍 **智能统计**：提供详细的开奖统计信息
 - 💾 **本地数据存储**：使用SQLite数据库本地存储彩票数据，减少网络查询
-- ⚡ **快速响应**：优先从本地数据库查询，提高查询速度
+- ⚡ **快速响应**：优先从本地数据库查询,提高查询速度
 - 🔄 **数据同步**：支持手动同步最新数据到本地数据库
 
 ## 支持的彩票类型
@@ -192,6 +196,7 @@ curl -X POST http://localhost:8000/api/sync/ssq?periods=20
 
 # 查看数据库信息
 curl http://localhost:8000/api/database/info
+```
 
 ## 测试
 
