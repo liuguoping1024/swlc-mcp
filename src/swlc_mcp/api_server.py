@@ -57,6 +57,7 @@ async def root():
             "latest": "/api/latest/{lottery_type}",
             "historical": "/api/historical/{lottery_type}",
             "analysis": "/api/analysis/{lottery_type}",
+        "seq_analysis": "/api/seq-analysis/{lottery_type}",
             "random": "/api/random/{lottery_type}",
             "sync": "/api/sync/{lottery_type}",
             "force_sync": "/api/force-sync/{lottery_type}",
@@ -250,6 +251,56 @@ async def get_number_analysis(
             
     except Exception as e:
         logger.error(f"获取号码分析失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/seq-analysis/{lottery_type}")
+async def analyze_seq_numbers(
+    lottery_type: str,
+    periods: int = Query(100, ge=5, le=1000, description="分析期数"),
+    sequence_length: int = Query(2, ge=1, le=10, description="连续期数")
+):
+    """
+    分析号码连续出现的概率（滑窗）：
+    - 理论值基于号码池与单期抽取数量
+    - 实测值基于历史数据滑窗统计
+    - 详情包含命中次数 / 窗口数
+    """
+    try:
+        lottery_type_map = {
+            "ssq": "双色球",
+            "3d": "福彩3D",
+            "qlc": "七乐彩",
+            "kl8": "快乐8"
+        }
+        chinese_type = lottery_type_map.get(lottery_type)
+        if not chinese_type:
+            raise HTTPException(status_code=400, detail="不支持的彩票类型")
+        
+        result = await lottery_service.analyze_seq_numbers(
+            lottery_type=chinese_type,
+            periods=periods,
+            sequence_length=sequence_length,
+        )
+        
+        return {
+            "success": True,
+            "data": {
+                "lottery_type": chinese_type,
+                "periods_used": result["periods_used"],
+                "sequence_length": result["sequence_length"],
+                "pool_size": result["pool_size"],
+                "numbers_per_draw": result["numbers_per_draw"],
+                "theoretical_prob": result["theoretical_prob"],
+                "empirical_prob": result["empirical_prob"],
+                "counts": result["counts"],
+                "max_run_distribution": result["max_run_distribution"],
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"连续概率分析失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/random/{lottery_type}")
