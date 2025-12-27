@@ -887,6 +887,101 @@ class SWLCService:
             }
         )
     
+    async def analyze_seq_numbers(
+        self,
+        lottery_type: str,
+        periods: int,
+        sequence_length: int,
+    ) -> Dict[str, Any]:
+        """
+        分析号码连续出现概率（滑窗）
+        
+        Args:
+            lottery_type: 彩票类型（需在 lottery_codes 中）
+            periods: 使用的期数窗口
+            sequence_length: 连续出现期数
+        Returns:
+            dict: 理论值、实测值、计数等
+        """
+        if sequence_length < 1:
+            raise ValueError("sequence_length must be >= 1")
+        # 获取历史数据
+        results = await self.get_historical_data(lottery_type, periods)
+        if not results:
+            raise ValueError("未获取到历史数据")
+        num_draws = len(results)
+        if sequence_length > num_draws:
+            raise ValueError("sequence_length 大于可用期数")
+        
+        # 抽取号码（仅主号码）
+        rows: List[List[int]] = []
+        for r in results:
+            try:
+                rows.append([int(n) for n in r.numbers])
+            except Exception:
+                # 如果存在非数字，直接跳过该期
+                continue
+        if not rows:
+            raise ValueError("历史数据格式异常，缺少号码")
+        
+        numbers_per_draw = len(rows[0])
+        # 不同彩票的号码池大小
+        pool_sizes = {
+            "双色球": 33,
+            "福彩3D": 10,
+            "七乐彩": 30,
+            "快乐8": 80,
+        }
+        pool_size = pool_sizes.get(lottery_type)
+        if not pool_size:
+            raise ValueError(f"不支持的彩票类型: {lottery_type}")
+        if numbers_per_draw > pool_size:
+            raise ValueError("每期号码数量大于号码池大小，数据异常")
+        
+        # 理论：单号在一期开出的概率
+        p_single = numbers_per_draw / pool_size
+        theoretical = p_single ** sequence_length
+        
+        # 实测：滑窗计数
+        from collections import Counter
+        balls = range(1, pool_size + 1)
+        total_windows = (num_draws - sequence_length + 1) * pool_size
+        hit_count = 0
+        max_run = {}
+        
+        for b in balls:
+            # 滑窗连续
+            for i in range(num_draws - sequence_length + 1):
+                if all(b in rows[i + j] for j in range(sequence_length)):
+                    hit_count += 1
+            # 最长连出
+            cur = longest = 0
+            for reds in rows:
+                if b in reds:
+                    cur += 1
+                    longest = max(longest, cur)
+                else:
+                    cur = 0
+            max_run[b] = longest
+        
+        empirical = hit_count / total_windows if total_windows else 0
+        max_run_dist = Counter(max_run.values())
+        
+        return {
+            "lottery_type": lottery_type,
+            "periods_used": num_draws,
+            "sequence_length": sequence_length,
+            "pool_size": pool_size,
+            "numbers_per_draw": numbers_per_draw,
+            "theoretical_prob": theoretical,
+            "empirical_prob": empirical,
+            "counts": {
+                "hits": hit_count,
+                "windows": total_windows,
+            },
+            "max_run_distribution": dict(sorted(max_run_dist.items())),
+        }
+    
     def generate_random_numbers(self, lottery_type: str) -> Dict[str, Any]:
         """生成随机号码推荐"""
         import random
@@ -1009,6 +1104,35 @@ def create_swlc_server() -> Server:
                             "maximum": 1000,
                             "default": 30,
                             "description": "分析期数"
+                        }
+                    },
+                    "required": ["lottery_type"]
+                }
+            ),
+            types.Tool(
+                name="analyze_seq_numbers",
+                description="分析号码连续出现概率（滑窗），返回理论值与实测值",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "lottery_type": {
+                            "type": "string",
+                            "enum": ["双色球", "福彩3D", "七乐彩", "快乐8"],
+                            "description": "彩票类型"
+                        },
+                        "periods": {
+                            "type": "integer",
+                            "minimum": 5,
+                            "maximum": 1000,
+                            "default": 100,
+                            "description": "分析期数"
+                        },
+                        "sequence_length": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 10,
+                            "default": 2,
+                            "description": "连续期数"
                         }
                     },
                     "required": ["lottery_type"]
@@ -1265,6 +1389,28 @@ def create_swlc_server() -> Server:
                     return [types.TextContent(type="text", text=text)]
                 else:
                     return [types.TextContent(type="text", text="获取数据失败，无法进行分析")]
+            
+            elif name == "analyze_seq_numbers":
+                lottery_type = arguments.get("lottery_type")
+                periods = arguments.get("periods", 100)
+                sequence_length = arguments.get("sequence_length", 2)
+                
+                result = await lottery_service.analyze_seq_numbers(
+                    lottery_type=lottery_type,
+                    periods=periods,
+                    sequence_length=sequence_length,
+                )
+                
+                detail = result.get("counts", {})
+                text = (
+                    f"{lottery_type} 连续出现分析（最近{result['periods_used']}期，连续{sequence_length}期）：\n\n"
+                    f"- 理论概率: {result['theoretical_prob']:.8f}\n"
+                    f"- 实测概率: {result['empirical_prob']:.8f}\n"
+                    f"- 计数: {detail.get('hits', 0)} / {detail.get('windows', 0)}\n"
+                    f"- 号码池: {result['pool_size']}，每期开出: {result['numbers_per_draw']}\n"
+                    f"- 最长连出分布: {result.get('max_run_distribution', {})}"
+                )
+                return [types.TextContent(type="text", text=text)]
             
             elif name == "generate_random_numbers":
                 lottery_type = arguments.get("lottery_type")
