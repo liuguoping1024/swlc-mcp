@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "swlc-mcp": {
+      "command": "C:\\Python313\\python.exe",
+      "args": ["D:\\github\\swlc-mcp\\start_server.py", "--mode", "mcp"],
+      "env": {
+        "PYTHONPATH": "D:\\github\\swlc-mcp\\src"
+      }
+    }
+  }
+}
+
+
+

@@ -110,7 +110,7 @@ async def get_latest_result(lottery_type: str):
 @app.get("/api/historical/{lottery_type}")
 async def get_historical_data(
     lottery_type: str, 
-    periods: int = Query(10, ge=1, le=100, description="获取期数")
+    periods: int = Query(10, ge=1, le=1000, description="获取期数")
 ):
     """获取历史开奖数据"""
     try:
@@ -156,7 +156,7 @@ async def get_historical_data(
 @app.get("/api/analysis/{lottery_type}")
 async def get_number_analysis(
     lottery_type: str,
-    periods: int = Query(30, ge=5, le=100, description="分析期数")
+    periods: int = Query(30, ge=5, le=1000, description="分析期数")
 ):
     """获取号码分析"""
     try:

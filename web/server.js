@@ -13,7 +13,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Python MCP Server API 配置
-const MCP_API_BASE = process.env.MCP_API_BASE || 'http://127.0.0.1:8001';
+const MCP_API_BASE = process.env.MCP_API_BASE || 'http://127.0.0.1:8000';
 
 // 代理 MCP 服务器的数据
 app.get('/api/draws', async (req, res) => {
