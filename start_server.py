@@ -14,7 +14,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from src.swlc_mcp.server import create_swlc_server, async_main
-from src.swlc_mcp.api_server import start_api_server
 
 # 配置日志
 logging.basicConfig(
@@ -28,20 +27,20 @@ def main():
     parser = argparse.ArgumentParser(description="SWLC MCP服务器启动脚本")
     parser.add_argument(
         "--mode", 
-        choices=["mcp", "api"], 
+        choices=["mcp", "api", "web"], 
         default="mcp",
-        help="启动模式: mcp (MCP服务器) 或 api (HTTP API服务器)"
+        help="启动模式: mcp (MCP服务器), api (HTTP API服务器), web (Web服务，包含API和前端)"
     )
     parser.add_argument(
         "--host", 
         default="0.0.0.0",
-        help="HTTP API服务器主机地址 (默认: 0.0.0.0)"
+        help="HTTP服务器主机地址 (默认: 0.0.0.0)"
     )
     parser.add_argument(
         "--port", 
         type=int, 
         default=8000,
-        help="HTTP API服务器端口 (默认: 8000)"
+        help="HTTP服务器端口 (默认: 8000)"
     )
     
     args = parser.parse_args()
@@ -57,6 +56,7 @@ def main():
             sys.exit(1)
     
     elif args.mode == "api":
+        from src.swlc_mcp.api_server import start_api_server
         logger.info(f"启动HTTP API服务器: http://{args.host}:{args.port}")
         try:
             start_api_server(host=args.host, port=args.port)
@@ -64,6 +64,17 @@ def main():
             logger.info("HTTP API服务器已停止")
         except Exception as e:
             logger.error(f"HTTP API服务器启动失败: {e}")
+            sys.exit(1)
+    
+    elif args.mode == "web":
+        from src.swlc_mcp.api_server import start_api_server
+        logger.info(f"启动Web服务（API + 前端）: http://{args.host}:{args.port}")
+        try:
+            start_api_server(host=args.host, port=args.port)
+        except KeyboardInterrupt:
+            logger.info("Web服务已停止")
+        except Exception as e:
+            logger.error(f"Web服务启动失败: {e}")
             sys.exit(1)
 
 if __name__ == "__main__":

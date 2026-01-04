@@ -130,7 +130,7 @@ async function loadHistoricalData() {
     dataDiv.innerHTML = '<div class="loading">加载中...</div>';
     
     try {
-        const response = await fetch(`/api/draws?lottery_type=${currentLotteryType}&periods=${periods}`);
+        const response = await fetch(`/api/historical/${currentLotteryType}?periods=${periods}`);
         const data = await response.json();
         
         if (data.success && data.data) {
@@ -249,6 +249,9 @@ async function loadNumberStats() {
             }
             
             statsDiv.innerHTML = html || '<div class="note">暂无统计数据</div>';
+            
+            // 绘制号码频率图表
+            drawFrequencyChart(stats);
         } else {
             statsDiv.innerHTML = '<div class="error">获取统计数据失败</div>';
         }
@@ -401,7 +404,126 @@ function initializeCharts() {
     const chartContainer = document.getElementById('chartContainer');
     if (chartContainer) {
         chartInstance = echarts.init(chartContainer);
+        // 设置默认图表
+        chartInstance.setOption({
+            title: {
+                text: '号码频率统计',
+                left: 'center'
+            },
+            tooltip: {
+                trigger: 'axis'
+            },
+            xAxis: {
+                type: 'category',
+                data: []
+            },
+            yAxis: {
+                type: 'value'
+            },
+            series: [{
+                data: [],
+                type: 'bar'
+            }]
+        });
     }
+}
+
+// 绘制号码频率图表
+function drawFrequencyChart(stats) {
+    if (!chartInstance) {
+        initializeCharts();
+    }
+    
+    const hotMap = stats.hot_numbers || {};
+    const coldMap = stats.cold_numbers || {};
+    
+    // 合并所有号码数据
+    const allNumbers = {};
+    Object.entries(hotMap).forEach(([num, freq]) => {
+        allNumbers[num] = { freq: Number(freq), type: 'hot' };
+    });
+    Object.entries(coldMap).forEach(([num, freq]) => {
+        if (!allNumbers[num]) {
+            allNumbers[num] = { freq: Number(freq), type: 'cold' };
+        }
+    });
+    
+    // 排序号码
+    const sortedNumbers = Object.entries(allNumbers)
+        .sort((a, b) => {
+            // 先按频率降序，再按号码升序
+            if (b[1].freq !== a[1].freq) {
+                return b[1].freq - a[1].freq;
+            }
+            return Number(a[0]) - Number(b[0]);
+        });
+    
+    const numbers = sortedNumbers.map(([num]) => num);
+    const frequencies = sortedNumbers.map(([, data]) => data.freq);
+    const colors = sortedNumbers.map(([, data]) => 
+        data.type === 'hot' ? '#ff6b6b' : '#4ecdc4'
+    );
+    
+    const option = {
+        title: {
+            text: `号码出现频率统计（最近${stats.analysis_periods}期）`,
+            left: 'center',
+            textStyle: {
+                fontSize: 16
+            }
+        },
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: {
+                type: 'shadow'
+            },
+            formatter: function(params) {
+                const data = params[0];
+                const idx = numbers.indexOf(data.name);
+                const type = sortedNumbers[idx][1].type === 'hot' ? '热门' : '冷门';
+                return `${data.name}号: 出现${data.value}次 (${type})`;
+            }
+        },
+        grid: {
+            left: '3%',
+            right: '4%',
+            bottom: '3%',
+            containLabel: true
+        },
+        xAxis: {
+            type: 'category',
+            data: numbers,
+            axisLabel: {
+                rotate: 45,
+                interval: 0
+            }
+        },
+        yAxis: {
+            type: 'value',
+            name: '出现次数'
+        },
+        series: [{
+            name: '出现次数',
+            type: 'bar',
+            data: frequencies.map((freq, idx) => ({
+                value: freq,
+                itemStyle: {
+                    color: colors[idx]
+                }
+            })),
+            label: {
+                show: true,
+                position: 'top'
+            }
+        }]
+    };
+    
+    chartInstance.setOption(option);
+    
+    // 响应式调整
+    window.addEventListener('resize', function() {
+        chartInstance.resize();
+    });
 }
 
 // 绘制回测图表
@@ -461,8 +583,7 @@ async function checkHealth() {
         const data = await response.json();
         
         const statusElement = document.getElementById('serverStatus');
-        const serverOk = (typeof data.mcp_server === 'string' && data.mcp_server === 'healthy')
-            || (data.mcp_server && data.mcp_server.status === 'healthy');
+        const serverOk = data.status === 'healthy';
         
         if (serverOk) {
             statusElement.innerHTML = '🟢 服务器正常';
@@ -472,7 +593,8 @@ async function checkHealth() {
             statusElement.className = 'status-item error';
         }
         
-        document.getElementById('lastUpdate').textContent = `最后更新: ${data.timestamp || ''}`;
+        const timestamp = data.timestamp ? new Date(data.timestamp).toLocaleString('zh-CN') : '';
+        document.getElementById('lastUpdate').textContent = `最后更新: ${timestamp}`;
     } catch (error) {
         const statusElement = document.getElementById('serverStatus');
         statusElement.innerHTML = '🔴 连接失败';

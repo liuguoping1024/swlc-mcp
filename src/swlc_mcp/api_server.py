@@ -3,17 +3,17 @@ SWLC MCP Server HTTP API
 为MCP服务器提供HTTP接口，支持其他应用通过HTTP请求访问彩票数据
 """
 
-import asyncio
-import json
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, Any, List
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 
-from .server import SWLCService, LotteryResult
+from .server import SWLCService
 
 # 导入新模块
 from .predictor import PredictionManager
@@ -46,9 +46,31 @@ lottery_service = SWLCService()
 prediction_manager = PredictionManager()
 backtest_engine = BacktestEngine()
 
-@app.get("/")
+# 获取项目根目录和静态文件目录
+BASE_DIR = Path(__file__).parent.parent.parent
+STATIC_DIR = BASE_DIR / "web" / "public"
+
+@app.get("/", response_class=HTMLResponse)
 async def root():
-    """API根路径"""
+    """返回前端页面"""
+    index_file = STATIC_DIR / "index.html"
+    if index_file.exists():
+        return FileResponse(str(index_file))
+    else:
+        return HTMLResponse("""
+        <html>
+            <head><title>SWLC MCP API</title></head>
+            <body>
+                <h1>SWLC MCP API服务</h1>
+                <p>前端页面未找到，请检查 web/public/index.html 文件</p>
+                <p><a href="/api/health">API健康检查</a></p>
+            </body>
+        </html>
+        """)
+
+@app.get("/api")
+async def api_info():
+    """API信息"""
     return {
         "message": "SWLC MCP API服务",
         "version": "1.0.0",
@@ -57,7 +79,7 @@ async def root():
             "latest": "/api/latest/{lottery_type}",
             "historical": "/api/historical/{lottery_type}",
             "analysis": "/api/analysis/{lottery_type}",
-        "seq_analysis": "/api/seq-analysis/{lottery_type}",
+            "seq_analysis": "/api/seq-analysis/{lottery_type}",
             "random": "/api/random/{lottery_type}",
             "sync": "/api/sync/{lottery_type}",
             "force_sync": "/api/force-sync/{lottery_type}",
@@ -599,6 +621,14 @@ async def health_check():
         "timestamp": datetime.now().isoformat(),
         "database": "connected" if lottery_service.db else "disconnected"
     }
+
+# 在所有路由定义之后挂载静态文件服务（CSS、JS、图片等）
+# 这样可以确保API路由优先匹配
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+    logger.info(f"静态文件目录: {STATIC_DIR}")
+else:
+    logger.warning(f"静态文件目录不存在: {STATIC_DIR}")
 
 def start_api_server(host: str = "0.0.0.0", port: int = 8000):
     """启动API服务器"""
