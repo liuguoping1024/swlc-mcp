@@ -224,6 +224,20 @@ class SWLCService:
                         prize_pool=pool_money,
                         sales_amount=sales
                     )
+                else:
+                    # 网络获取失败，如果有数据库数据则返回数据库数据
+                    if db_result:
+                        logger.warning("网络获取双色球数据失败，返回数据库数据")
+                        return LotteryResult(
+                            lottery_type="双色球",
+                            period=db_result['period'],
+                            draw_date=db_result['draw_date'],
+                            numbers=db_result['red_balls'],
+                            special_numbers=[db_result['blue_ball']],
+                            prize_pool=db_result['prize_pool'],
+                            sales_amount=db_result['sales_amount']
+                        )
+                    return None
             else:
                 logger.info("从本地数据库获取双色球数据")
                 return LotteryResult(
@@ -1138,28 +1152,29 @@ def create_swlc_server() -> Server:
                     "required": ["lottery_type"]
                 }
             ),
-            types.Tool(
-                name="generate_random_numbers",
-                description="生成随机彩票号码推荐",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "lottery_type": {
-                            "type": "string",
-                            "enum": ["双色球", "福彩3D", "七乐彩", "快乐8"],
-                            "description": "彩票类型"
-                        },
-                        "count": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 10,
-                            "default": 1,
-                            "description": "生成组数"
-                        }
-                    },
-                    "required": ["lottery_type"]
-                }
-            ),
+            # 暂时屏蔽：号码生成接口
+            # types.Tool(
+            #     name="generate_random_numbers",
+            #     description="生成随机彩票号码推荐",
+            #     inputSchema={
+            #         "type": "object",
+            #         "properties": {
+            #             "lottery_type": {
+            #                 "type": "string",
+            #                 "enum": ["双色球", "福彩3D", "七乐彩", "快乐8"],
+            #                 "description": "彩票类型"
+            #             },
+            #             "count": {
+            #                 "type": "integer",
+            #                 "minimum": 1,
+            #                 "maximum": 10,
+            #                 "default": 1,
+            #                 "description": "生成组数"
+            #             }
+            #         },
+            #         "required": ["lottery_type"]
+            #     }
+            # ),
             types.Tool(
                 name="sync_lottery_data",
                 description="同步指定彩票类型的最新数据到本地数据库",
@@ -1213,69 +1228,71 @@ def create_swlc_server() -> Server:
                     "required": []
                 }
             ),
-            types.Tool(
-                name="predict_lottery",
-                description="预测彩票号码，基于历史数据生成预测结果",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "lottery_type": {
-                            "type": "string",
-                            "enum": ["双色球", "福彩3D", "七乐彩", "快乐8"],
-                            "description": "彩票类型"
-                        },
-                        "method": {
-                            "type": "string",
-                            "enum": ["rule"],
-                            "default": "rule",
-                            "description": "预测方法"
-                        },
-                        "count": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 20,
-                            "default": 5,
-                            "description": "预测组数"
-                        },
-                        "strategy": {
-                            "type": "string",
-                            "enum": ["all", "balanced", "cold_recovery", "hot_focus", "interval_balance", "contrarian"],
-                            "default": "all",
-                            "description": "预测策略"
-                        }
-                    },
-                    "required": ["lottery_type"]
-                }
-            ),
-            types.Tool(
-                name="backtest_lottery",
-                description="回测预测算法，评估预测准确性",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "lottery_type": {
-                            "type": "string",
-                            "enum": ["双色球", "福彩3D", "七乐彩", "快乐8"],
-                            "description": "彩票类型"
-                        },
-                        "window_size": {
-                            "type": "integer",
-                            "minimum": 50,
-                            "maximum": 500,
-                            "default": 100,
-                            "description": "窗口大小（训练数据期数）"
-                        },
-                        "step": {
-                            "type": "integer",
-                            "minimum": 10,
-                            "maximum": 100,
-                            "default": 50,
-                            "description": "步长（每次移动的期数）"
-                        }
-                    },
-                    "required": ["lottery_type"]
-                }
-            )
+            # 暂时屏蔽：预测接口
+            # types.Tool(
+            #     name="predict_lottery",
+            #     description="预测彩票号码，基于历史数据生成预测结果",
+            #     inputSchema={
+            #         "type": "object",
+            #         "properties": {
+            #             "lottery_type": {
+            #                 "type": "string",
+            #                 "enum": ["双色球", "福彩3D", "七乐彩", "快乐8"],
+            #                 "description": "彩票类型"
+            #             },
+            #             "method": {
+            #                 "type": "string",
+            #                 "enum": ["rule"],
+            #                 "default": "rule",
+            #                 "description": "预测方法"
+            #             },
+            #             "count": {
+            #                 "type": "integer",
+            #                 "minimum": 1,
+            #                 "maximum": 20,
+            #                 "default": 5,
+            #                 "description": "预测组数"
+            #             },
+            #             "strategy": {
+            #                 "type": "string",
+            #                 "enum": ["all", "balanced", "cold_recovery", "hot_focus", "interval_balance", "contrarian"],
+            #                 "default": "all",
+            #                 "description": "预测策略"
+            #             }
+            #         },
+            #         "required": ["lottery_type"]
+            #     }
+            # ),
+            # 暂时屏蔽：回测接口
+            # types.Tool(
+            #     name="backtest_lottery",
+            #     description="回测预测算法，评估预测准确性",
+            #     inputSchema={
+            #         "type": "object",
+            #         "properties": {
+            #             "lottery_type": {
+            #                 "type": "string",
+            #                 "enum": ["双色球", "福彩3D", "七乐彩", "快乐8"],
+            #                 "description": "彩票类型"
+            #             },
+            #             "window_size": {
+            #                 "type": "integer",
+            #                 "minimum": 50,
+            #                 "maximum": 500,
+            #                 "default": 100,
+            #                 "description": "窗口大小（训练数据期数）"
+            #             },
+            #             "step": {
+            #                 "type": "integer",
+            #                 "minimum": 10,
+            #                 "maximum": 100,
+            #                 "default": 50,
+            #                 "description": "步长（每次移动的期数）"
+            #             }
+            #         },
+            #         "required": ["lottery_type"]
+            #     }
+            # )
         ]
     
     @server.call_tool()
@@ -1283,19 +1300,36 @@ def create_swlc_server() -> Server:
         """调用工具"""
         try:
             if name == "get_latest_ssq":
-                result = await lottery_service.get_ssq_latest()
-                if result:
-                    return [types.TextContent(
-                        type="text",
-                        text=f"""双色球最新开奖结果：
+                try:
+                    result = await lottery_service.get_ssq_latest()
+                    if result:
+                        return [types.TextContent(
+                            type="text",
+                            text=f"""双色球最新开奖结果：
 期号：{result.period}
 开奖日期：{result.draw_date}
 开奖号码：{' '.join(result.numbers)} + {' '.join(result.special_numbers or [])}
 奖池金额：{result.prize_pool or '暂无'}
 销售金额：{result.sales_amount or '暂无'}"""
-                    )]
-                else:
-                    return [types.TextContent(type="text", text="获取双色球数据失败")]
+                        )]
+                    else:
+                        # 尝试从数据库获取，即使过期也返回
+                        db_result = lottery_service.db.get_latest_ssq()
+                        if db_result:
+                            return [types.TextContent(
+                                type="text",
+                                text=f"""双色球最新开奖结果（数据库数据）：
+期号：{db_result['period']}
+开奖日期：{db_result['draw_date']}
+开奖号码：{' '.join(db_result['red_balls'])} + {db_result['blue_ball']}
+奖池金额：{db_result.get('prize_pool', '暂无')}
+销售金额：{db_result.get('sales_amount', '暂无')}
+注意：这是数据库中的历史数据，可能不是最新一期"""
+                            )]
+                        return [types.TextContent(type="text", text="获取双色球数据失败：数据库和网络均无可用数据")]
+                except Exception as e:
+                    logger.error(f"MCP调用get_latest_ssq失败: {e}", exc_info=True)
+                    return [types.TextContent(type="text", text=f"获取双色球数据失败：{str(e)}")]
             
             elif name == "get_latest_3d":
                 result = await lottery_service.get_3d_latest()
@@ -1412,19 +1446,20 @@ def create_swlc_server() -> Server:
                 )
                 return [types.TextContent(type="text", text=text)]
             
-            elif name == "generate_random_numbers":
-                lottery_type = arguments.get("lottery_type")
-                count = arguments.get("count", 1)
-                
-                results = []
-                for i in range(count):
-                    random_result = lottery_service.generate_random_numbers(lottery_type)
-                    results.append(f"推荐 {i+1}: {random_result['format']}")
-                
-                return [types.TextContent(
-                    type="text",
-                    text=f"{lottery_type}随机号码推荐：\n\n" + "\n".join(results)
-                )]
+            # 暂时屏蔽：号码生成接口
+            # elif name == "generate_random_numbers":
+            #     lottery_type = arguments.get("lottery_type")
+            #     count = arguments.get("count", 1)
+            #     
+            #     results = []
+            #     for i in range(count):
+            #         random_result = lottery_service.generate_random_numbers(lottery_type)
+            #         results.append(f"推荐 {i+1}: {random_result['format']}")
+            #     
+            #     return [types.TextContent(
+            #         type="text",
+            #         text=f"{lottery_type}随机号码推荐：\n\n" + "\n".join(results)
+            #     )]
             
             elif name == "sync_lottery_data":
                 lottery_type = arguments.get("lottery_type")
@@ -1493,88 +1528,90 @@ def create_swlc_server() -> Server:
                 except Exception as e:
                     return [types.TextContent(type="text", text=f"获取数据库信息失败：{str(e)}")]
             
-            elif name == "predict_lottery":
-                lottery_type = arguments.get("lottery_type")
-                method = arguments.get("method", "rule")
-                count = arguments.get("count", 5)
-                strategy = arguments.get("strategy", "all")
-                
-                try:
-                    # 获取历史数据用于预测
-                    historical_data = await lottery_service.get_historical_data(lottery_type, 120)
-                    if not historical_data:
-                        return [types.TextContent(type="text", text=f"获取{lottery_type}历史数据失败，无法进行预测")]
-                    
-                    # 转换为字典格式
-                    history_dict = [{
-                        'period': r.period,
-                        'numbers': r.numbers,
-                        'special_numbers': r.special_numbers,
-                        'draw_date': r.draw_date
-                    } for r in historical_data]
-                    
-                    # 执行预测
-                    predictions = await lottery_service.prediction_manager.predict(
-                        lottery_type, history_dict, method=method, count=count, strategy=strategy
-                    )
-                    
-                    if predictions:
-                        text_lines = [f"{lottery_type}预测结果（方法：{method}，策略：{strategy}）：\n"]
-                        for i, pred in enumerate(predictions, 1):
-                            if pred.special_numbers:
-                                numbers_str = f"{' '.join(pred.numbers)} + {' '.join(pred.special_numbers)}"
-                            else:
-                                numbers_str = ' '.join(pred.numbers)
-                            text_lines.append(f"预测 {i}: {numbers_str} (置信度: {pred.confidence:.2%})")
-                        
-                        return [types.TextContent(type="text", text="\n".join(text_lines))]
-                    else:
-                        return [types.TextContent(type="text", text=f"{lottery_type}预测失败")]
-                        
-                except Exception as e:
-                    logger.error(f"预测失败: {e}")
-                    return [types.TextContent(type="text", text=f"预测失败：{str(e)}")]
+            # 暂时屏蔽：预测接口
+            # elif name == "predict_lottery":
+            #     lottery_type = arguments.get("lottery_type")
+            #     method = arguments.get("method", "rule")
+            #     count = arguments.get("count", 5)
+            #     strategy = arguments.get("strategy", "all")
+            #     
+            #     try:
+            #         # 获取历史数据用于预测
+            #         historical_data = await lottery_service.get_historical_data(lottery_type, 120)
+            #         if not historical_data:
+            #             return [types.TextContent(type="text", text=f"获取{lottery_type}历史数据失败，无法进行预测")]
+            #         
+            #         # 转换为字典格式
+            #         history_dict = [{
+            #             'period': r.period,
+            #             'numbers': r.numbers,
+            #             'special_numbers': r.special_numbers,
+            #             'draw_date': r.draw_date
+            #         } for r in historical_data]
+            #         
+            #         # 执行预测
+            #         predictions = await lottery_service.prediction_manager.predict(
+            #             lottery_type, history_dict, method=method, count=count, strategy=strategy
+            #         )
+            #         
+            #         if predictions:
+            #             text_lines = [f"{lottery_type}预测结果（方法：{method}，策略：{strategy}）：\n"]
+            #             for i, pred in enumerate(predictions, 1):
+            #                 if pred.special_numbers:
+            #                     numbers_str = f"{' '.join(pred.numbers)} + {' '.join(pred.special_numbers)}"
+            #                 else:
+            #                     numbers_str = ' '.join(pred.numbers)
+            #                 text_lines.append(f"预测 {i}: {numbers_str} (置信度: {pred.confidence:.2%})")
+            #             
+            #             return [types.TextContent(type="text", text="\n".join(text_lines))]
+            #         else:
+            #             return [types.TextContent(type="text", text=f"{lottery_type}预测失败")]
+            #             
+            #     except Exception as e:
+            #         logger.error(f"预测失败: {e}")
+            #         return [types.TextContent(type="text", text=f"预测失败：{str(e)}")]
             
-            elif name == "backtest_lottery":
-                lottery_type = arguments.get("lottery_type")
-                window_size = arguments.get("window_size", 100)
-                step = arguments.get("step", 50)
-                
-                try:
-                    # 获取历史数据用于回测
-                    historical_data = await lottery_service.get_historical_data(lottery_type, window_size * 2)
-                    if len(historical_data) < window_size:
-                        return [types.TextContent(type="text", text=f"历史数据不足，需要至少{window_size}期数据")]
-                    
-                    # 转换为字典格式
-                    history_dict = [{
-                        'period': r.period,
-                        'numbers': r.numbers,
-                        'special_numbers': r.special_numbers,
-                        'draw_date': r.draw_date
-                    } for r in historical_data]
-                    
-                    # 执行回测
-                    backtest_result = await lottery_service.backtest_engine.run_backtest(
-                        lottery_type, history_dict, window_size=window_size, step=step
-                    )
-                    
-                    text_lines = [
-                        f"{lottery_type}回测结果：\n",
-                        f"总回测期数：{backtest_result.total_periods}期",
-                        f"平均准确率：{backtest_result.average_accuracy:.2%}",
-                        f"最佳策略：{backtest_result.best_strategy}",
-                        "\n各策略表现："
-                    ]
-                    
-                    for strategy, performance in backtest_result.strategy_performance.items():
-                        text_lines.append(f"- {strategy}: 准确率 {performance:.2%}")
-                    
-                    return [types.TextContent(type="text", text="\n".join(text_lines))]
-                    
-                except Exception as e:
-                    logger.error(f"回测失败: {e}")
-                    return [types.TextContent(type="text", text=f"回测失败：{str(e)}")]
+            # 暂时屏蔽：回测接口
+            # elif name == "backtest_lottery":
+            #     lottery_type = arguments.get("lottery_type")
+            #     window_size = arguments.get("window_size", 100)
+            #     step = arguments.get("step", 50)
+            #     
+            #     try:
+            #         # 获取历史数据用于回测
+            #         historical_data = await lottery_service.get_historical_data(lottery_type, window_size * 2)
+            #         if len(historical_data) < window_size:
+            #             return [types.TextContent(type="text", text=f"历史数据不足，需要至少{window_size}期数据")]
+            #         
+            #         # 转换为字典格式
+            #         history_dict = [{
+            #             'period': r.period,
+            #             'numbers': r.numbers,
+            #             'special_numbers': r.special_numbers,
+            #             'draw_date': r.draw_date
+            #         } for r in historical_data]
+            #         
+            #         # 执行回测
+            #         backtest_result = await lottery_service.backtest_engine.run_backtest(
+            #             lottery_type, history_dict, window_size=window_size, step=step
+            #         )
+            #         
+            #         text_lines = [
+            #             f"{lottery_type}回测结果：\n",
+            #             f"总回测期数：{backtest_result.total_periods}期",
+            #             f"平均准确率：{backtest_result.average_accuracy:.2%}",
+            #             f"最佳策略：{backtest_result.best_strategy}",
+            #             "\n各策略表现："
+            #         ]
+            #         
+            #         for strategy, performance in backtest_result.strategy_performance.items():
+            #             text_lines.append(f"- {strategy}: 准确率 {performance:.2%}")
+            #         
+            #         return [types.TextContent(type="text", text="\n".join(text_lines))]
+            #         
+            #     except Exception as e:
+            #         logger.error(f"回测失败: {e}")
+            #         return [types.TextContent(type="text", text=f"回测失败：{str(e)}")]
             
             else:
                 return [types.TextContent(type="text", text=f"未知工具：{name}")]
